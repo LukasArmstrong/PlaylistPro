@@ -210,9 +210,9 @@ Distributed under the GPL License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Lukas Armstrong - Lucas.J.Armstrong@gmail.com
+Lukas Armstrong - PlaylistPro@LukasArmstrong.io
 
-Project Link: [https://github.com/LukasArmstrong/Youtube-Playlist-Organizer](https://github.com/LukasArmstrong/Youtube-Playlist-Organizer)
+Project Link: [https://github.com/LukasArmstrong/PlaylistPro](https://github.com/LukasArmstrong/PlaylistPro)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
