@@ -89,6 +89,7 @@ This started because I wanted to sort my watch later list on youtube by duration
 
 * [![Python][Python]][Python-url]
 * [![Flask][Flask]][Flask-url]
+* [![React][React]][React-url]
 * [![YoutubeAPI][YoutubeAPI]][YoutubeAPI]
 * [![MariaDB][MariaDB]][MariaDB-url]
 
