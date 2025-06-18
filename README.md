@@ -159,18 +159,17 @@ However before the first sort, you'll need to get a token. This is done by:
 - [x] Add Getting Started Section to README
 - [x] Add usage section to README
 - [x] Proper logging support
+- [X] Create frontend
+    - [X] Login with Oauth
+    - [X] button for sorting
+    - [ ] GUI to add creator/keywords
+    - [ ] GUI to delete creator/keywords
+    - [ ] GUI to set/update creator/keyword priority
 - [ ] Auto add videos to watchlater queue. Hopefully in correct position
      - [ ] Tool to scrape youtube subscriptions 
 - [ ] Smarter use of Quota limit data
 - [ ] Track upload time to predict when creator videos should release
 - [ ] Scrape youtube channels to collect data on publish times 
-- [ ] Create frontend (wig?)
-    - [ ] Login with 2auth
-    - [ ] button for sorting
-    - [ ] button for token renewal
-    - [ ] GUI to add creator/keywords
-    - [ ] GUI to delete creator/keywords
-    - [ ] GUI to set/update creator/keyword priority
 - [ ] Look into token renewal process. See if automation can be preformed  
 - [ ] Make youtube play update function for efficient
   
@@ -250,6 +249,8 @@ Project Link: [https://github.com/LukasArmstrong/Youtube-Playlist-Organizer](htt
 [Python-url]: https://www.python.org/
 [Flask]: https://img.shields.io/badge/flask-000000?style=for-the-badge&logo=flask&logoColor=white
 [Flask-url]: https://flask.palletsprojects.com/en/3.0.x/
+[React]: https://img.shields.io/badge/-ReactJs-61DAFB?logo=react&logoColor=white&style=for-the-badge
+[React-url]: https://react.dev/
 [YoutubeAPI]: https://img.shields.io/badge/youtube_api-FF0000?style=for-the-badge&logo=youtube&logoColor=white
 [YoutubAPI-url]: https://developers.google.com/youtube/v3
 [MariaDB]: https://img.shields.io/badge/mariadb-003545?style=for-the-badge&logo=mariadb&logoColor=white
