@@ -23,13 +23,13 @@
 <br />
 <div align="center">
   <a href="https://github.com/LukasArmstrong/Youtube-Playlist-Organizer">
-    <img src="Images/PywerTube.png" alt="Logo" width="80" height="80">
+    <img src="Images/PlaylistPro_Logo.png" alt="Logo" width=auto height="80">
   </a>
 
 <h3 align="center">PlaylistPro</h3>
 
   <p align="center">
-    Simple web flask server that sorts youtube watchlater by duration
+    Simple web app that sorts youtube watchlater by duration and assigned priority.
     <br />
     <!--
     <a href="https://github.com/LukasArmstrong/Youtube-Playlist-Organizer"><strong>Explore the docs »</strong></a>
