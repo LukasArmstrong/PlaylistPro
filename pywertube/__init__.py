@@ -2,7 +2,23 @@
 pywertube - Python Power User code for YouTube
 
 A library for managing and sorting YouTube playlists.
+Supports SQLite (default) and MariaDB/MySQL via SQLAlchemy.
 """
+
+# Database
+from .db import db, init_db
+
+# Models
+from .models import (
+    Creator,
+    Keyphrase,
+    WatchLaterVideo,
+    OrderVideo,
+    SequentialCreator,
+    WatchLaterStat,
+    WatchLaterCreatorStat,
+    QuotaLimit,
+)
 
 # Logging
 from .logging_config import (
@@ -13,14 +29,26 @@ from .logging_config import (
 
 # Database operations
 from .database import (
-    getDataBaseConnection,
-    getDataDB,
-    setDataDB,
-    updateDataDB,
-    clearTableDB,
+    get_creators_dict,
+    get_keyphrases_dict,
+    get_sequential_creators_dict,
+    get_order_videos_list,
+    clear_watch_later,
+    clear_order_videos,
+    store_watch_later,
+    get_watch_later_videos,
+    get_creator_by_name,
+    get_creator_id_map,
+    add_creator,
+    add_watch_later_stat,
+    add_creator_stat,
+    get_subscribed_channel_ids,
+    # Backwards compatibility
     storeWatchLaterDB,
+    clearTableDB,
+    getDataBaseConnection,
     closeDBConnection,
-    CloseDBconnnection,  # backwards compatibility alias
+    CloseDBconnnection,
 )
 
 # Quota management
@@ -77,17 +105,40 @@ from .utils import (
 )
 
 __all__ = [
+    # Database core
+    'db',
+    'init_db',
+    # Models
+    'Creator',
+    'Keyphrase',
+    'WatchLaterVideo',
+    'OrderVideo',
+    'SequentialCreator',
+    'WatchLaterStat',
+    'WatchLaterCreatorStat',
+    'QuotaLimit',
     # Logging
     'initLogger',
     'setLogger',
     'getLogger',
-    # Database
-    'getDataBaseConnection',
-    'getDataDB',
-    'setDataDB',
-    'updateDataDB',
-    'clearTableDB',
+    # Database operations
+    'get_creators_dict',
+    'get_keyphrases_dict',
+    'get_sequential_creators_dict',
+    'get_order_videos_list',
+    'clear_watch_later',
+    'clear_order_videos',
+    'store_watch_later',
+    'get_watch_later_videos',
+    'get_creator_by_name',
+    'get_creator_id_map',
+    'add_creator',
+    'add_watch_later_stat',
+    'add_creator_stat',
+    'get_subscribed_channel_ids',
     'storeWatchLaterDB',
+    'clearTableDB',
+    'getDataBaseConnection',
     'closeDBConnection',
     'CloseDBconnnection',
     # Quota

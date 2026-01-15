@@ -1,166 +1,252 @@
-import mariadb
+"""
+Database operations for PlaylistPro using SQLAlchemy ORM.
+
+This module provides database helper functions that work with the
+SQLAlchemy models. For most operations, you should import and use
+the models directly.
+"""
+
+from .db import db
+from .models import (
+    Creator, Keyphrase, WatchLaterVideo, OrderVideo,
+    SequentialCreator, WatchLaterStat, WatchLaterCreatorStat, QuotaLimit
+)
 from .logging_config import getLogger
-from .utils import checkType, sanitizeTitle
-
-# Global database connection
-gDBconn = None
+from .utils import sanitizeTitle
 
 
-def getDataBaseConnection(usr, pswd, host, port, db):
-    """Establish a connection to the MariaDB database."""
+def get_creators_dict():
+    """Get a dictionary mapping creator names to priority scores."""
+    gLogger = getLogger()
+    gLogger.debug("Fetching creators dictionary...")
+    creators = Creator.query.all()
+    return {c.creators: c.priorityScore for c in creators}
+
+
+def get_keyphrases_dict():
+    """Get a dictionary mapping phrases to scores."""
+    gLogger = getLogger()
+    gLogger.debug("Fetching keyphrases dictionary...")
+    phrases = Keyphrase.query.all()
+    return {p.phrase: p.score for p in phrases}
+
+
+def get_sequential_creators_dict():
+    """Get a dictionary of sequential creators with duration exceptions."""
+    gLogger = getLogger()
+    gLogger.debug("Fetching sequential creators...")
+    results = db.session.query(
+        Creator.creators,
+        SequentialCreator.DurationExpection
+    ).join(
+        SequentialCreator,
+        Creator.id == SequentialCreator.creatorId
+    ).all()
+    return dict(results)
+
+
+def get_order_videos_list():
+    """Get the follow-up video relationships as lists."""
+    gLogger = getLogger()
+    gLogger.debug("Fetching order videos...")
+    videos = OrderVideo.query.all()
+    if not videos:
+        return []
+    ids = [v.id for v in videos]
+    video_ids = [v.videoID for v in videos]
+    predecent_ids = [v.predecentVideoID for v in videos]
+    return [ids, video_ids, predecent_ids]
+
+
+def clear_watch_later():
+    """Delete all records from WatchLaterList table."""
+    gLogger = getLogger()
+    gLogger.debug("Clearing WatchLaterList table...")
+    WatchLaterVideo.query.delete()
+    db.session.commit()
+    gLogger.debug("WatchLaterList cleared!")
+
+
+def clear_order_videos():
+    """Delete all records from OrderVideos table."""
+    gLogger = getLogger()
+    gLogger.debug("Clearing OrderVideos table...")
+    OrderVideo.query.delete()
+    db.session.commit()
+    gLogger.debug("OrderVideos cleared!")
+
+
+def store_watch_later(watchlater_tuples):
+    """
+    Store the watch later list in the database.
+
+    Args:
+        watchlater_tuples: List of tuples in format:
+            (position, playlistID, videoID, duration, creator, publishedTimeUTC, title)
+    """
     gLogger = getLogger()
     gLogger.debug("Entering...")
-    gLogger.debug("Checking types...")
-    checkType(usr, str)
-    checkType(pswd, str)
-    checkType(host, str)
-    checkType(port, int)
-    checkType(db, str)
-    try:
-        gLogger.debug("Attempting MariaDB connection...")
-        global gDBconn
-        gDBconn = mariadb.connect(
-            user=usr,
-            password=pswd,
-            host=host,
-            port=port,
-            database=db
+
+    # Clear existing data
+    clear_watch_later()
+    gLogger.debug("WatchLaterList cleared!")
+
+    gLogger.debug("Filling new list...")
+    for video_tuple in watchlater_tuples:
+        video = WatchLaterVideo(
+            position=video_tuple[0],
+            playlistID=video_tuple[1],
+            videoID=video_tuple[2],
+            duration=video_tuple[3],
+            creator=video_tuple[4],
+            publishedTimeUTC=video_tuple[5],
+            title=sanitizeTitle(video_tuple[6])
         )
-        gLogger.debug("Database Connection established!")
-    except mariadb.Error as e:
-        gLogger.error(f"Error connecting to MariaDB Platform.  Type: {type(e)} Arguements:{e}", usr=usr, pswd=pswd, host=host, port=port, db=db)
-        raise mariadb.Error(e)
-    gLogger.debug("Leaving...")
+        db.session.add(video)
+
+    db.session.commit()
+    gLogger.debug("Watch Later stored in database!")
 
 
-def getDataDB(tableString, cols, optionsString=""):
-    """Execute a SELECT query and return results."""
+def get_watch_later_videos():
+    """Get all watch later videos as a list of tuples."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking types...")
-    checkType(tableString, str)
-    checkType(cols, list)
-    cur = gDBconn.cursor()
-    gLogger.debug("Get connection cursor obtained...")
-    query = "Select " + " ,".join(cols) + " from " + tableString + " " + optionsString
-    try:
-        gLogger.debug("Attempting query...")
-        cur.execute(query)
-        gLogger.debug("Query Successful!")
-    except mariadb.Error as e:
-        gLogger.error(f"Error executing query {query}.  Type: {type(e)} Arguements:{e}", conn=gDBconn, tableString=tableString, cols=cols)
-        raise mariadb.Error(e)
-    gLogger.debug("Leaving...")
-    return cur.fetchall()
+    gLogger.debug("Fetching watch later videos...")
+    videos = WatchLaterVideo.query.order_by(WatchLaterVideo.position).all()
+    return [v.to_tuple() for v in videos]
 
 
-def setDataDB(tableString, cols_list, vals_list, optionsString=""):
-    """Execute an INSERT query."""
+def get_creator_by_name(name):
+    """Get a creator by name."""
+    return Creator.query.filter_by(creators=name).first()
+
+
+def get_creator_id_map():
+    """Get a dictionary mapping creator names to IDs."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking Number of Columns = Number of values to assign...")
-    if len(cols_list) != len(vals_list):
-        gLogger.error("Lengths of Columns and Values differ!", DB_Connection=gDBconn, Table=tableString, Columns=cols_list, Values=vals_list)
-        raise ValueError("Lengths of Columns and Values differ!")
-    gLogger.debug("Checking types...")
-    checkType(tableString, str)
-    checkType(cols_list, list)
-    checkType(vals_list, list)
-    checkType(optionsString, str)
-    cur = gDBconn.cursor()
-    gLogger.debug("Set connection cursor obtained!")
-    query = f"Insert Into {tableString}{*cols_list,}"
-    query = query.replace("'", "`")
-    query += f" Values {*vals_list,} {optionsString}"
-    try:
-        gLogger.debug("Attempting query...")
-        cur.execute(query)
-        gLogger.debug("Query Successful!")
-        gDBconn.commit()
-        gLogger.debug("Query Committed!")
-    except mariadb.Error as e:
-        gLogger.error(f"Error executing query {query}.  Type: {type(e)} Arguements:{e}", DB_Connection=gDBconn, Table=tableString, Columns=cols_list, Values=vals_list)
-        raise mariadb.Error(e)
-    gLogger.debug(f"Leaving...")
+    gLogger.debug("Fetching creator ID map...")
+    creators = Creator.query.all()
+    return {c.creators: c.id for c in creators}
 
 
-def updateDataDB(tableString, cols_list, vals_list, optionsString=""):
-    """Execute an UPDATE query."""
+def add_creator(name, priority_score=0, channel_id=None, subscribed=False,
+                unconditional=False, sequential=False):
+    """Add a new creator to the database."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking Number of Columns = Number of values to assign...")
-    if len(cols_list) != len(vals_list):
-        gLogger.error("Lengths of Columns and Values differ!", DB_Connection=gDBconn, Table=tableString, Columns=cols_list, Values=vals_list)
-        raise ValueError("Lengths of Columns and Values differ!")
-    gLogger.debug("Checking types...")
-    checkType(tableString, str)
-    checkType(cols_list, list)
-    checkType(vals_list, list)
-    checkType(optionsString, str)
-    cur = gDBconn.cursor()
-    gLogger.debug("Update connection cursor obtained!")
-    query = f"Update {tableString} set { ', '.join(f'`{x}` = {str(vals_list[i])}' for i, x in enumerate(cols_list)) } {optionsString}"
-    try:
-        gLogger.debug("Attempting query...")
-        cur.execute(query)
-        gLogger.debug("Query Successful!")
-        gDBconn.commit()
-        gLogger.debug("Query Committed!")
-    except mariadb.Error as e:
-        gLogger.error(f"Error executing query {query}.  Type: {type(e)} Arguements:{e}", DB_Connection=gDBconn, Table=tableString, Columns=cols_list, Values=vals_list)
-        raise mariadb.Error(e)
-    gLogger.debug(f"Leaving...")
+    gLogger.debug(f"Adding creator: {name}")
+
+    creator = Creator(
+        creators=name,
+        priorityScore=priority_score,
+        channelId=channel_id,
+        subscribed=subscribed,
+        unconditional=unconditional,
+        sequentialVideos=sequential
+    )
+    db.session.add(creator)
+    db.session.commit()
+    gLogger.debug(f"Creator {name} added with ID {creator.id}")
+    return creator
 
 
-def clearTableDB(tableString):
-    """Delete all records from a table."""
+def add_watch_later_stat(datetime_str, length, total_duration, avg_duration,
+                         median_duration, stdv_duration, variance_duration,
+                         num_unique_creators):
+    """Add a watch later statistics record."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking types...")
-    checkType(tableString, str)
-    cur = gDBconn.cursor()
-    gLogger.debug("Delete connection cursor obtained!")
-    query = f"Delete From {tableString}"
-    try:
-        gLogger.debug("Attempting query...")
-        cur.execute(query)
-        gLogger.debug("Query Successful!")
-        gDBconn.commit()
-        gLogger.debug("Query Committed!")
-    except mariadb.Error as e:
-        gLogger.error(f"Error executing query {query}.  Type: {type(e)} Arguements:{e}", DB_Connection=gDBconn, Table=tableString)
-        raise mariadb.Error(e)
-    gLogger.debug(f"Leaving...")
+    gLogger.debug("Adding watch later stats...")
 
+    stat = WatchLaterStat(
+        Date=datetime_str,
+        Length=length,
+        TotalDuration=total_duration,
+        AverageDuration=avg_duration,
+        MedianDuration=median_duration,
+        StdvDuration=stdv_duration,
+        VarianceDuration=variance_duration,
+        NumUniqueCreators=num_unique_creators
+    )
+    db.session.add(stat)
+    db.session.commit()
+    gLogger.debug("Watch later stats added!")
+
+
+def add_creator_stat(datetime_str, creator_id, frequency, duration, oldest_video,
+                     longest_video, avg_unix_age, freq_pct, duration_pct):
+    """Add a per-creator statistics record."""
+    gLogger = getLogger()
+    gLogger.debug(f"Adding creator stat for creator {creator_id}...")
+
+    stat = WatchLaterCreatorStat(
+        date=datetime_str,
+        CreatorID=creator_id,
+        Frequency=frequency,
+        Duration=duration,
+        OldestVideo=oldest_video,
+        LongestVideo=longest_video,
+        AverageUnixAge=avg_unix_age,
+        FrequencyPercentage=freq_pct,
+        DurationPercentage=duration_pct
+    )
+    db.session.add(stat)
+    db.session.commit()
+    gLogger.debug("Creator stat added!")
+
+
+def get_subscribed_channel_ids():
+    """Get channel IDs for all subscribed creators."""
+    gLogger = getLogger()
+    gLogger.debug("Fetching subscribed channel IDs...")
+    creators = Creator.query.filter_by(subscribed=True).all()
+    return [c.channelId for c in creators if c.channelId]
+
+
+# ============================================================
+# Backwards compatibility aliases
+# These maintain the old API while using SQLAlchemy underneath
+# ============================================================
 
 def storeWatchLaterDB(watchlater):
-    """Store the watch later list in the database."""
+    """Backwards compatible alias for store_watch_later."""
+    store_watch_later(watchlater)
+
+
+def clearTableDB(table_name):
+    """Backwards compatible function to clear a table by name."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking types...")
-    checkType(watchlater, list)
-    clearTableDB('WatchLaterList')
-    gLogger.debug("WatchLaterList Cleared!")
-    gLogger.debug("Filling new list...")
-    for video in watchlater:
-        videoList = list(video)
-        videoList[6] = sanitizeTitle(videoList[6])
-        setDataDB('WatchLaterList', ['position', 'playlistID', 'videoID', 'duration', 'creator', 'publishedTimeUTC', 'title'], videoList, 'ON DUPLICATE KEY UPDATE position=Value(position)')
-    gLogger.debug("Watch Later stored in database!")
-    gLogger.debug(f"Leaving...")
+    gLogger.debug(f"Clearing table: {table_name}")
+
+    table_map = {
+        'WatchLaterList': WatchLaterVideo,
+        'OrderVideos': OrderVideo,
+        'Creators': Creator,
+        'Keyphrases': Keyphrase,
+        'WatchLaterStats': WatchLaterStat,
+        'WatchLaterCreatorStats': WatchLaterCreatorStat,
+        'QuotaLimit': QuotaLimit,
+        'SequentialCreators': SequentialCreator,
+    }
+
+    model = table_map.get(table_name)
+    if model:
+        model.query.delete()
+        db.session.commit()
+        gLogger.debug(f"Table {table_name} cleared!")
+    else:
+        gLogger.warning(f"Unknown table: {table_name}")
+
+
+# Legacy function stubs - these are no longer needed with Flask-SQLAlchemy
+def getDataBaseConnection(usr, pswd, host, port, db_name):
+    """No-op: Database connection handled by Flask-SQLAlchemy."""
+    gLogger = getLogger()
+    gLogger.debug("getDataBaseConnection called - handled by Flask-SQLAlchemy")
 
 
 def closeDBConnection():
-    """Close the database connection."""
+    """No-op: Connection management handled by Flask-SQLAlchemy."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Closing DB connection...")
-    global gDBconn
-    gDBconn.close()
-    gLogger.debug("Clearing Global DB connection variable...")
-    gDBconn = None
-    gLogger.debug("Cleared! Leaving...")
+    gLogger.debug("closeDBConnection called - handled by Flask-SQLAlchemy")
 
 
-# Keep old name for backwards compatibility
-CloseDBconnnection = closeDBConnection
+CloseDBconnnection = closeDBConnection  # Backwards compatibility alias

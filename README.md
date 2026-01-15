@@ -60,15 +60,16 @@
       <a href="#getting-started">Getting Started</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
+        <li><a href="#quick-start">Quick Start</a></li>
+        <li><a href="#database-configuration">Database Configuration</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
+    <li><a href="#project-structure">Project Structure</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
 
@@ -79,7 +80,7 @@
 
 <!-- [![Product Name Screen Shot][product-screenshot]](https://example.com) -->
 
-This started because I wanted to sort my watch later list on youtube by duration with some key execepts to priority, some videos being in a series, some creators release order mattering, and one-off videos being follow up to longer videos. After I accomplish this goal and refactored the code a bit, I decided to keep enhancing the project. There are lots of little things I would like to add to make this a poweruser tool. However, unless something changes with the Youtube API quota limit, I doubt very many people will able to use this project in it's entirety. I would consider this project in its infancy still, but others are welcome to fork or make suggestions for changes.
+This started because I wanted to sort my watch later list on youtube by duration with some key exceptions for priority, some videos being in a series, some creators release order mattering, and one-off videos being follow up to longer videos. After I accomplished this goal and refactored the code a bit, I decided to keep enhancing the project. There are lots of little things I would like to add to make this a power user tool. However, unless something changes with the Youtube API quota limit, I doubt very many people will be able to use this project in its entirety. I would consider this project in its infancy still, but others are welcome to fork or make suggestions for changes.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -89,6 +90,7 @@ This started because I wanted to sort my watch later list on youtube by duration
 
 * [![Python][Python]][Python-url]
 * [![Flask][Flask]][Flask-url]
+* [![SQLAlchemy][SQLAlchemy]][SQLAlchemy-url]
 * [![React][React]][React-url]
 * [![YoutubeAPI][YoutubeAPI]][YoutubeAPI]
 * [![MariaDB][MariaDB]][MariaDB-url]
@@ -103,54 +105,160 @@ This started because I wanted to sort my watch later list on youtube by duration
 
 ### Prerequisites
 
-* python
+* Python 3.8+
   - Download the [latest version](https://www.python.org/downloads/)
 * pip
   - Download and follow [documentation](https://pip.pypa.io/en/stable/installation/#get-pip-py)
-  - Make sure pip is up to date with the follow command:
+  - Make sure pip is up to date:
     ```sh
     pip install --upgrade pip
     ```
-* Client_secret.json file
+* YouTube API Credentials
   - Go to [Google's Cloud Console](https://console.cloud.google.com/)
-  - Make a project and make sure youtube's v3 api is enabled.
-  - Create OAuth 2.0 Client IDS under APIs & Services > Credentials.
-* MariaDB Database
-  - Please see schema under images.
+  - Create a project and enable the YouTube Data API v3
+  - Create OAuth 2.0 Client IDs under APIs & Services > Credentials
 
-### Installation
 
-1. Clone the repo
+### Quick Start
+
+Get up and running in minutes with SQLite (no database setup required):
+
+1. **Clone the repo**
    ```sh
    git clone https://github.com/LukasArmstrong/Youtube-Playlist-Organizer.git
+   cd Youtube-Playlist-Organizer
    ```
-2. Install required modules
+
+2. **Install dependencies**
    ```sh
    pip install -r requirements.txt
    ```
-3. Place client_secret file in the directory
-4. Update config.yaml
-5. Start webserver
+
+3. **Set up YouTube API credentials**
+
+   Create a `.env` file or export environment variables:
    ```sh
-   python3 YoutubeWebServer.py
+   export CLIENT_ID="your-client-id"
+   export CLIENT_SECRET="your-client-secret"
+   export PROJECT_ID="your-project-id"
+   export AUTH_URI="https://accounts.google.com/o/oauth2/auth"
+   export TOKEN_URI="https://oauth2.googleapis.com/token"
+   export AUTH_PROVIDER="https://www.googleapis.com/oauth2/v1/certs"
+   export REDIRECT_URIS="http://localhost:5000"
+   export YOUTUBE_PLAYLIST_ID="your-playlist-id"
+   export IDRIS_PROJECT_ID="1"
+   export INTERNAL_FLOW_PORT="8080"
+   export HOST_IP="0.0.0.0"
+   export HOST_PORT="5000"
    ```
+
+4. **Run the application**
+   ```sh
+   python3 YoutubeWebserver.py
+   ```
+
+   The app will automatically create a SQLite database (`playlistpro.db`) on first run.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+
+### Database Configuration
+
+PlaylistPro supports multiple database backends via SQLAlchemy. The app automatically detects your environment:
+
+| Environment | Database | Configuration |
+|-------------|----------|---------------|
+| Development | SQLite | Automatic (no setup needed) |
+| Production | MariaDB/MySQL | Set `DATABASE_URL` or `ENVIRONMENT=production` |
+
+#### Option 1: SQLite (Default)
+No configuration needed. The app creates `playlistpro.db` automatically.
+
+#### Option 2: Explicit DATABASE_URL
+Set the `DATABASE_URL` environment variable:
+```sh
+# MariaDB/MySQL
+export DATABASE_URL="mysql+pymysql://user:password@localhost:3306/playlistpro"
+
+# PostgreSQL (also supported)
+export DATABASE_URL="postgresql://user:password@localhost:5432/playlistpro"
+```
+
+#### Option 3: Production Mode with MariaDB Environment Variables
+Set `ENVIRONMENT=production` and the app will use your existing MariaDB environment variables:
+```sh
+export ENVIRONMENT="production"
+export DATABASE_SERVER_IP="localhost"
+export DATABASE_PORT="3306"
+export DATABASE_USER="your_user"
+export DATABASE_PASSWORD="your_password"
+export DATABASE="playlistpro"
+```
+
+#### Docker Compose Example
+```yaml
+version: '3.8'
+services:
+  playlistpro:
+    build: .
+    environment:
+      - DATABASE_URL=mysql+pymysql://user:password@mariadb:3306/playlistpro
+      # ... other env vars
+    depends_on:
+      - mariadb
+
+  mariadb:
+    image: mariadb:latest
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=playlistpro
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
 ## Usage
 
-Admitedly, this where most of the work needs to be done. Currently, to run the sorting algorithm, you go to go to:
-- ```url
-  http://<YOUR_HOST_IP>/sort
-  ```
-However before the first sort, you'll need to get a token. This is done by:
-- ```url
-  http://<YOUR_HOST_IP>/renew
-  ```
+1. **Get an OAuth token** (first time only):
+   ```
+   http://<YOUR_HOST_IP>:<PORT>/renew
+   ```
+
+2. **Sort your playlist**:
+   Navigate to the home page and click the sort button, or visit:
+   ```
+   http://<YOUR_HOST_IP>:<PORT>/
+   ```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+## Project Structure
+
+```
+PlaylistPro/
+├── YoutubeWebserver.py      # Flask application entry point
+├── pywertube/               # Core library package
+│   ├── __init__.py          # Package exports
+│   ├── db.py                # SQLAlchemy database instance
+│   ├── models.py            # Database models (8 tables)
+│   ├── database.py          # Database helper functions
+│   ├── youtube_api.py       # YouTube API interactions
+│   ├── sorting.py           # Playlist sorting algorithms
+│   ├── quota.py             # API quota tracking
+│   ├── utils.py             # Utility functions
+│   └── logging_config.py    # Logging configuration
+├── templates/               # Flask HTML templates
+├── static/                  # Static assets (CSS, JS)
+└── requirements.txt         # Python dependencies
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 
 <!-- ROADMAP -->
@@ -159,20 +267,22 @@ However before the first sort, you'll need to get a token. This is done by:
 - [x] Add Getting Started Section to README
 - [x] Add usage section to README
 - [x] Proper logging support
+- [x] SQLAlchemy ORM integration
+- [x] SQLite support for easy development
 - [X] Create frontend
     - [X] Login with Oauth
     - [X] button for sorting
     - [ ] GUI to add creator/keywords
     - [ ] GUI to delete creator/keywords
     - [ ] GUI to set/update creator/keyword priority
-- [ ] Auto add videos to watchlater queue. Hopefully in correct position
-     - [ ] Tool to scrape youtube subscriptions 
+- [ ] Auto add videos to watchlater queue (hopefully in correct position)
+     - [ ] Tool to scrape youtube subscriptions
 - [ ] Smarter use of Quota limit data
 - [ ] Track upload time to predict when creator videos should release
-- [ ] Scrape youtube channels to collect data on publish times 
-- [ ] Look into token renewal process. See if automation can be preformed  
-- [ ] Make youtube play update function for efficient
-  
+- [ ] Scrape youtube channels to collect data on publish times
+- [ ] Look into token renewal process (see if automation can be performed)
+- [ ] Make youtube playlist update function more efficient
+
 
 See the [open issues](https://github.com/LukasArmstrong/Youtube-Playlist-Organizer/issues) for a full list of proposed features (and known issues).
 
@@ -218,17 +328,6 @@ Project Link: [https://github.com/LukasArmstrong/PlaylistPro](https://github.com
 
 
 
-<!-- ACKNOWLEDGMENTS 
-## Acknowledgments
-
-* []()
-* []()
-* []()
--->
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/LukasArmstrong/pywerTube.svg?style=for-the-badge
@@ -249,6 +348,8 @@ Project Link: [https://github.com/LukasArmstrong/PlaylistPro](https://github.com
 [Python-url]: https://www.python.org/
 [Flask]: https://img.shields.io/badge/flask-000000?style=for-the-badge&logo=flask&logoColor=white
 [Flask-url]: https://flask.palletsprojects.com/en/3.0.x/
+[SQLAlchemy]: https://img.shields.io/badge/sqlalchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white
+[SQLAlchemy-url]: https://www.sqlalchemy.org/
 [React]: https://img.shields.io/badge/-ReactJs-61DAFB?logo=react&logoColor=white&style=for-the-badge
 [React-url]: https://react.dev/
 [YoutubeAPI]: https://img.shields.io/badge/youtube_api-FF0000?style=for-the-badge&logo=youtube&logoColor=white

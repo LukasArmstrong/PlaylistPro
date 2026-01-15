@@ -1,3 +1,10 @@
+"""
+YouTube API operations for PlaylistPro.
+
+This module handles all interactions with the YouTube Data API v3,
+including authentication, playlist management, and video operations.
+"""
+
 import os
 import pickle
 import requests
@@ -6,7 +13,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 from .logging_config import getLogger
-from .database import getDataDB, setDataDB
+from .db import db
+from .models import Creator
 from .utils import checkType, durationString2Sec, dateString2EpochTime, sanitizeTitle, getCreatorDictionary
 
 # Global strike counter
@@ -343,30 +351,39 @@ def storeSubscripton(subs, youtube):
     gLogger = getLogger()
     creatorDict = getCreatorDictionary([], youtube)[0]
     lastID = max(creatorDict.values()) if creatorDict else 0
-    creatores = []
+
     for sub in subs:
-        creatores.append(sub["snippet"]["title"])
-    test = creatorDict.keys()
-    test2 = list(set(creatores) - set(test))
-    for sub in subs:
-        if sanitizeTitle(sub["snippet"]["title"]) not in creatorDict.keys():
-            creator = sanitizeTitle(sub["snippet"]["title"])
-            insertCreatorsDB(creator, channel_id=sub["snippet"]["resourceId"]["channelId"], subscribedBool=1)
-            creatorDict[creator] = lastID + 1
+        creator_name = sanitizeTitle(sub["snippet"]["title"])
+        if creator_name not in creatorDict.keys():
+            channel_id = sub["snippet"]["resourceId"]["channelId"]
+            insertCreatorsDB(creator_name, channel_id=channel_id, subscribedBool=True)
+            creatorDict[creator_name] = lastID + 1
             lastID += 1
 
 
-def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=0, unconditionalBool=0, sequentialBoolInt=0, youtube=None):
+def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=False,
+                     unconditionalBool=False, sequentialBoolInt=False, youtube=None):
     """Insert a new creator into the database."""
     gLogger = getLogger()
-    if not channel_id:
+
+    if not channel_id and youtube:
         channel_id = findChannelID(creator, youtube)
-    cols = ['creators', 'priorityScore', 'channelId', 'subscribed', 'unconditional', 'sequentialVideos']
-    vals = [creator, priorirtyScore, channel_id, subscribedBool, unconditionalBool, sequentialBoolInt]
+
     try:
-        setDataDB('Creators', cols, vals)
+        new_creator = Creator(
+            creators=creator,
+            priorityScore=priorirtyScore,
+            channelId=channel_id,
+            subscribed=subscribedBool,
+            unconditional=unconditionalBool,
+            sequentialVideos=sequentialBoolInt
+        )
+        db.session.add(new_creator)
+        db.session.commit()
+        gLogger.debug(f"Creator {creator} inserted successfully")
     except Exception as e:
-        gLogger.error(f"Error insert creator: {e}")
+        db.session.rollback()
+        gLogger.error(f"Error inserting creator: {e}")
 
 
 def pubhubsubhubPost(mode, topic, callback):
@@ -378,7 +395,13 @@ def pubhubsubhubPost(mode, topic, callback):
 
 def subscribeCreators():
     """Subscribe to PubSubHubbub notifications for all subscribed creators."""
-    channelIDs = getDataDB('Creators', ['channelId'], 'Where subscribed = 1')
-    for cID in channelIDs:
-        topic = 'https://www.youtube.com/feeds/videos.xml?channel_id=' + cID[0]
-        pubhubsubhubPost('subscribe', topic, 'http://youtube.lukasarmstrong.io/webhook')
+    gLogger = getLogger()
+    gLogger.debug("Fetching subscribed creators...")
+
+    # Query subscribed creators using ORM
+    subscribed_creators = Creator.query.filter_by(subscribed=True).all()
+
+    for creator in subscribed_creators:
+        if creator.channelId:
+            topic = f'https://www.youtube.com/feeds/videos.xml?channel_id={creator.channelId}'
+            pubhubsubhubPost('subscribe', topic, 'http://youtube.lukasarmstrong.io/webhook')

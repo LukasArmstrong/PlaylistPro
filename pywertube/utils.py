@@ -1,3 +1,10 @@
+"""
+Utility functions for PlaylistPro.
+
+This module contains helper functions for type checking, data conversion,
+configuration loading, and statistics generation.
+"""
+
 import datetime as dt
 import pickle
 import re
@@ -59,15 +66,15 @@ def getProjectVariablesENV():
     gLogger = getLogger()
     gLogger.debug("Entering...")
     database = os.environ.get('DATABASE')
-    mariaPort = int(os.environ.get('DATABASE_PORT'))
+    mariaPort = int(os.environ.get('DATABASE_PORT', 3306))
     password = os.environ.get('DATABASE_PASSWORD')
     serverIp = os.environ.get('DATABASE_SERVER_IP')
     user = os.environ.get('DATABASE_USER')
-    projectID = int(os.environ.get('IDRIS_PROJECT_ID'))
-    portNumber = int(os.environ.get('INTERNAL_FLOW_PORT'))
+    projectID = int(os.environ.get('IDRIS_PROJECT_ID', 1))
+    portNumber = int(os.environ.get('INTERNAL_FLOW_PORT', 8080))
     playlistID = os.environ.get('YOUTUBE_PLAYLIST_ID')
-    hostIP = os.environ.get('HOST_IP')
-    hostPort = int(os.environ.get('HOST_PORT'))
+    hostIP = os.environ.get('HOST_IP', '0.0.0.0')
+    hostPort = int(os.environ.get('HOST_PORT', 5000))
     return (database, mariaPort, password, serverIp, user, hostIP, hostPort, projectID, portNumber, playlistID)
 
 
@@ -175,8 +182,8 @@ def sanitizeTitle(string):
 def getCreatorDictionary(creatorList, youtube):
     """Build a dictionary mapping creator names to IDs."""
     # Import here to avoid circular dependency
-    from .database import getDataDB
-    from .youtube_api import insertCreatorsDB
+    from .database import get_creator_id_map, add_creator
+    from .youtube_api import findChannelID
 
     gLogger = getLogger()
     gLogger.debug("Entering...")
@@ -187,52 +194,62 @@ def getCreatorDictionary(creatorList, youtube):
     checkType(youtube, gacd.Resource)
 
     gLogger.debug("Getting Ids for creators...")
-    data = getDataDB('Creators', ['id', 'creators'])
-    dataDict = dict(data)
-    gLogger.debug("Swapping values and keys in creator dict...")
-    creatorDict = dict((v, k) for k, v in dataDict.items())
+    creatorDict = get_creator_id_map()
     lastID = max(creatorDict.values()) if creatorDict else 0
+
     gLogger.debug("Looping over creators to make sure all have an ID...")
     quotaUsed = 0
     for creator in creatorList:
-        if sanitizeTitle(creator) not in creatorDict:
-            insertCreatorsDB(sanitizeTitle(creator), youtube=youtube)
-            creatorDict[creator] = lastID + 1
+        sanitized = sanitizeTitle(creator)
+        if sanitized not in creatorDict:
+            channel_id = findChannelID(creator, youtube)
+            add_creator(sanitized, channel_id=channel_id)
+            creatorDict[sanitized] = lastID + 1
             lastID += 1
+
     gLogger.debug("Returning creator dictionary...")
     return creatorDict, quotaUsed * 100
 
 
-def WatchLaterStats(watchLater, datetime):
+def WatchLaterStats(watchLater, datetime_str):
     """Calculate and store statistics about the watch later list."""
     # Import here to avoid circular dependency
-    from .database import setDataDB
+    from .database import add_watch_later_stat
 
     gLogger = getLogger()
     gLogger.debug("Entering...")
     gLogger.debug("Checking Types...")
     checkType(watchLater, list)
-    checkType(datetime, str)
+    checkType(datetime_str, str)
+
     gLogger.debug("Creating creator list and duration list...")
     durationList = [video[3] for video in watchLater]
     creatorList = [video[4] for video in watchLater]
-    gLogger.debug("Creatings watch later stats...")
-    cols = ['Date', 'Length', 'TotalDuration', 'AverageDuration', 'MedianDuration', 'StdvDuration', 'VarianceDuration', 'NumUniqueCreators']
-    vals = [datetime, len(watchLater), sum(durationList), stats.fmean(durationList), stats.median(durationList), stats.pstdev(durationList), stats.pvariance(durationList), len(set(creatorList))]
-    setDataDB('WatchLaterStats', cols, vals)
+
+    gLogger.debug("Creating watch later stats...")
+    add_watch_later_stat(
+        datetime_str=datetime_str,
+        length=len(watchLater),
+        total_duration=sum(durationList),
+        avg_duration=stats.fmean(durationList),
+        median_duration=stats.median(durationList),
+        stdv_duration=stats.pstdev(durationList),
+        variance_duration=stats.pvariance(durationList),
+        num_unique_creators=len(set(creatorList))
+    )
     gLogger.debug("Leaving...")
 
 
-def WatchLaterCreatorStats(watchLater, datetime, youtube):
+def WatchLaterCreatorStats(watchLater, datetime_str, youtube):
     """Calculate and store per-creator statistics."""
     # Import here to avoid circular dependency
-    from .database import setDataDB
+    from .database import add_creator_stat
 
     gLogger = getLogger()
     gLogger.debug("Entering...")
     gLogger.debug("Checking Types...")
     checkType(watchLater, list)
-    checkType(datetime, str)
+    checkType(datetime_str, str)
 
     import googleapiclient.discovery as gacd
     checkType(youtube, gacd.Resource)
@@ -240,16 +257,27 @@ def WatchLaterCreatorStats(watchLater, datetime, youtube):
     gLogger.debug("Creating creator list and duration list...")
     creatorList = [video[4] for video in watchLater]
     durationList = [video[3] for video in watchLater]
+
     gLogger.debug("Creating Creator -> ID mapping...")
     creatorDict, quotaUsed = getCreatorDictionary(creatorList, youtube)
+
     gLogger.debug("Looping over creators to save stats")
     for creator in creatorDict.keys():
         creatorDurationList = [video[3] for video in watchLater if video[4] == creator]
         creatorPublishList = [video[5] for video in watchLater if video[4] == creator]
         if creatorDurationList and creatorPublishList:
-            cols = ['date', 'CreatorID', 'Frequency', 'Duration', 'OldestVideo', 'LongestVideo', 'AverageUnixAge', 'FrequencyPercentage', 'DurationPercentage']
-            vals = [datetime, creatorDict[creator], creatorList.count(creator), sum(creatorDurationList), creatorPublishList[-1], max(creatorDurationList), stats.fmean(creatorPublishList), creatorList.count(creator) / len(creatorList), sum(creatorDurationList) / sum(durationList)]
-            setDataDB('WatchLaterCreatorStats', cols, vals)
+            add_creator_stat(
+                datetime_str=datetime_str,
+                creator_id=creatorDict[creator],
+                frequency=creatorList.count(creator),
+                duration=sum(creatorDurationList),
+                oldest_video=creatorPublishList[-1],
+                longest_video=max(creatorDurationList),
+                avg_unix_age=stats.fmean(creatorPublishList),
+                freq_pct=creatorList.count(creator) / len(creatorList),
+                duration_pct=sum(creatorDurationList) / sum(durationList)
+            )
+
     gLogger.debug("Returning quota...")
     return quotaUsed
 
