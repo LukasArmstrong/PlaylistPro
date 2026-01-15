@@ -39,9 +39,6 @@ pt.getDataBaseConnection(user, password, serverIp, mariaPort, database)
 
 sequentialCreators_and_exceptions_list = pt.getDataDB('SequentialCreators',['Creators', 'DurationExpection'], 'left  join Creators on SequentialCreators.creatorId = Creators.id')
 sequentialCreatorsDict = dict(sequentialCreators_and_exceptions_list)
-#unzippedSequential = list(zip(*sequentialCreators_and_exceptions_list))
-#sequentialCreators = unzippedSequential[0]
-#sequentialExcpetions = unzippedSequential[1]
 
 @app.route('/', methods=('GET','POST'))
 def index():
@@ -68,79 +65,8 @@ def webhook():
     webhookLog.debug("webhooklog set as logger!")
     if request.method == 'POST':
         pt.pickleSomething(request.data, "request_"+dt.now().strftime("%Y%m%d%H%M%S"))
-        # if not pt.checkTypeReturn(request.data, dict):
-        #     data = json.loads(request.data)
-        # else:
-        #     data = x2d.parse(request.data)
-        # entry = data["feed"]["entry"]
-        # if pt.checkTypeReturn(entry,dict):
-        #     if dt.today().strftime("%Y-%m-%d") == entry["published"].split("T")[0]:
-        #         try:
-        #             creatorDictionary, keywordDictionary, videoFollowUpList, quota, inDB = initWatchLater(webhookLog)
-        #             DBwatchlater = pt.getDataDB('WatchLaterList',['*'])
-        #             try:
-        #                 uncondictionalBool = dict(pt.getDataDB('Creators', ['creators','unconditional']))
-        #                 if bool(int.from_bytes(uncondictionalBool["PewDiePie"],"big")):
-        #                     try:
-        #                         youtube = getYoutubeObj(logger)
-        #                         try:
-        #                             videoDict = pt.getVideoYT(youtube, entry["yt:videoId"])
-        #                             quota += 1
-        #                             try:
-        #                                 videoTuple = (len(DBwatchlater), '', entry["yt:videoId"], videoDict["duration"], videoDict["creator"], videoDict["published"], videoDict["title"])
-        #                                 DBwatchlater.append(videoTuple)
-        #                                 sortedWatchLater = pt.sortWatchLater(DBwatchlater, creatorDictionary, keywordDictionary, numberedSerializedKeywords, serializedKeywords, videoFollowUpList, sequentialCreators)
-        #                                 webhookLog.info("Watchlater sorted!")
-        #                                 try:    
-        #                                     postion = sortedWatchLater.index(videoTuple)
-        #                                     try:
-        #                                         pt.insertVideoYT(youtube, playlistID, entry["yt:videoId"], postion)
-        #                                         quota += 50
-        #                                         webhookLog.info("YT video inserted!")
-        #                                         try:
-        #                                             pt.storeWatchLaterDB(sortedWatchLater)
-        #                                             webhookLog.info("Watchlater stored in DB for stats!")
-        #                                             datetime = dt.now().strftime('%Y-%m-%d %H:%M:%S')
-        #                                             pt.WatchLaterStats(sortedWatchLater, datetime)
-        #                                             quota += pt.WatchLaterCreatorStats(sortedWatchLater, datetime, youtube)
-        #                                         except Exception as e:
-        #                                             webhookLog.error(f"Error getting index of stored video: {e}")
-        #                                     except Exception as e:
-        #                                         webhookLog.error(f"Error inserting Video into YT playylist: {e}")
-        #                                 except Exception as e:
-        #                                     webhookLog.error(f"Error getting index of stored video: {e}")
-        #                             except Exception as e:
-        #                                 webhookLog.error(f"Error sorting watch later: {e}")
-        #                         except Exception as e:
-        #                             webhookLog.error(f"Error getting video info from YT: {e}")
-        #                     except Exception as e:
-        #                         webhookLog.error(f"Error getting youtube obj: {e}")
-        #             except Exception as e:
-        #                 webhookLog.error(f"Error getting uncondictional boolean: {e}")
-        #         except Exception as e:
-        #             webhookLog.error(f"Error getting inital data to insert: {e}")                    
-                
-        #         try:
-        #             pt.setQuotaUsed(inDB, quota, 1)
-        #             webhookLog.info(f"Used Quota set! Total accrude: {quota}")
-        #             webhookLog.info("Watch later stats stored")
-        #             pt.CloseDBconnnection()
-        #             webhookLog.info(f"Database connection closed!")
-        #         except Exception as e:
-        #             webhookLog.error(f"Error setting data in DB: {e}")
-                
-
-        #         ic(f"youtube video '{entry['title']}' released by {entry['author']['name']}!")
-        #         ic(data)
-        #     #    if entry["author"]["name"] not in storedCreators:
-        #     #        pt.insertCreator(entry["author"]["name"], entry["yt:channelId"])
-        #     #        storedCreators.append(entry["author"]["name"])
-        #     #    pt.insertTime(storedCreators.index(entry["author"]["name"])+1, entry["published"], entry["yt:videoId"])
-        #     else:
-        #         ic(f"{entry['author']['name']} has updated video '{entry['title']}'!")
+        
         return {"message": "Accepted"}, 202
-        # else:
-        #     return {"message": "Not Accepted"}, 406
     else:
         return request.args.get('hub.challenge')
 
@@ -158,14 +84,8 @@ def subscribe():
     pt.subscribeCreators()
     return "subscribers updated"
 
-#@app.route('/sort', methods=['POST'])
+
 def sort():
-    #pt.structlog.threadlocal.clear_threadlocal()
-    #pt.structlog.threadlocal.bind_threadlocal(
-    #    view=request.path,
-    #    request_id=str(uuid.uuid4()),
-    #    peer=request.access_route[0],data
-    #)
     msg = ""
     sortLog = logger.bind()
     pt.setLogger(sortLog)
