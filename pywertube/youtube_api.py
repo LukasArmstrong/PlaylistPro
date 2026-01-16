@@ -5,17 +5,26 @@ This module handles all interactions with the YouTube Data API v3,
 including authentication, playlist management, and video operations.
 """
 
+from __future__ import annotations
+
 import os
 import pickle
 import requests
+from typing import Any, Optional
+
 import googleapiclient.discovery as gacd
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 
 from .logging_config import getLogger
 from .db import db
 from .models import Creator
 from .utils import checkType, durationString2Sec, dateString2EpochTime, sanitizeTitle, getCreatorDictionary
+
+# Type aliases
+VideoTuple = tuple[int, str, str, float, str, float, str]  # (position, playlistID, videoID, duration, creator, publishedTime, title)
+ClientConfig = dict[str, Any]  # OAuth client configuration dictionary
 
 # Maximum retries for API errors before failing
 MAX_RETRIES = 3
@@ -24,17 +33,25 @@ MAX_RETRIES = 3
 _youtube_client = None
 
 
-def get_youtube_client(port_number, client_secret_file, force_refresh=False):
+# OAuth scopes required for YouTube API
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/youtubepartner"
+]
+
+
+def get_youtube_client(port_number: int, client_config: ClientConfig, force_refresh: bool = False) -> gacd.Resource:
     """
     Get a YouTube API client, with optional caching.
 
     Args:
         port_number: Port for OAuth flow
-        client_secret_file: Path to client secret JSON
+        client_config: OAuth config dict (from OAuthConfig.to_client_secret_dict())
         force_refresh: If True, create a new client even if cached
 
     Returns:
-        googleapiclient.discovery.Resource: YouTube API client
+        YouTube API client resource
     """
     global _youtube_client
     gLogger = getLogger()
@@ -42,17 +59,17 @@ def get_youtube_client(port_number, client_secret_file, force_refresh=False):
     if _youtube_client is not None and not force_refresh:
         return _youtube_client
 
-    credentials = getCredentials(port_number, client_secret_file)
+    credentials = getCredentials(port_number, client_config)
     _youtube_client = gacd.build("youtube", "v3", credentials=credentials)
     gLogger.info("YouTube API client initialized")
 
     return _youtube_client
 
 
-def getCredentials(portNumber, clientSecretFile):
+def getCredentials(portNumber: int, clientConfig: ClientConfig) -> Credentials:
     """Get or refresh OAuth2 credentials for YouTube API."""
     gLogger = getLogger()
-    credentials = None
+    credentials: Optional[Credentials] = None
 
     # Load existing credentials if available
     if os.path.exists("token.pickle"):
@@ -67,7 +84,7 @@ def getCredentials(portNumber, clientSecretFile):
             saveCredentails(credentials)
         else:
             gLogger.info("Initiating new OAuth flow")
-            flow = getFlowObject(clientSecretFile)
+            flow = getFlowObject(clientConfig)
             flow.run_local_server(
                 port=portNumber,
                 prompt="consent",
@@ -79,17 +96,19 @@ def getCredentials(portNumber, clientSecretFile):
     return credentials
 
 
-def getFlowObject(clientSecretFile):
-    """Create an OAuth2 flow object for authentication."""
-    return InstalledAppFlow.from_client_secrets_file(
-        clientSecretFile,
-        scopes=["https://www.googleapis.com/auth/youtube",
-                "https://www.googleapis.com/auth/youtube.force-ssl",
-                "https://www.googleapis.com/auth/youtubepartner"]
+def getFlowObject(clientConfig: ClientConfig) -> InstalledAppFlow:
+    """Create an OAuth2 flow object for authentication.
+
+    Args:
+        clientConfig: OAuth config dict (kept in memory, not written to disk)
+    """
+    return InstalledAppFlow.from_client_config(
+        clientConfig,
+        scopes=YOUTUBE_SCOPES
     )
 
 
-def saveCredentails(credentials):
+def saveCredentails(credentials: Credentials) -> None:
     """Save OAuth2 credentials to a pickle file."""
     with open("token.pickle", "wb") as f:
         pickle.dump(credentials, f)

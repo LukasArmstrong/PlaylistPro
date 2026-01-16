@@ -12,9 +12,6 @@ from datetime import datetime as dt
 import pywertube as pt
 from pywertube import config
 
-# Client secret file path
-CLIENT_SECRET_FILE = 'youtube_user_client_secret.json'
-
 # Sorting keywords
 NUMBERED_SERIALIZED_KEYWORDS = ['series', 'part', 'finale', 'episode', 'ep', '#', 'chapter']
 SERIALIZED_KEYWORDS = []
@@ -24,9 +21,6 @@ if os.environ.get('TERM_PROGRAM') == 'vscode':
     logger = pt.initLogger(__file__, debug=True, verbose=False)
 else:
     logger = pt.initLogger(__file__, debug=config.debug_mode, verbose=config.verbose_debug)
-
-# Write client secret file for OAuth
-pt.createJsonFile(CLIENT_SECRET_FILE, config.oauth.to_client_secret_dict())
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -90,7 +84,7 @@ def subscribe():
     pt.setLogger(subLog)
     subLog.info("subLogger set as logger!")
 
-    youtube = pt.get_youtube_client(config.oauth_port, CLIENT_SECRET_FILE)
+    youtube = pt.get_youtube_client(config.oauth_port, config.oauth.to_client_secret_dict())
     subLog.info("YouTube client obtained!")
 
     subs = pt.getSubscriptions(youtube, mine=True)
@@ -205,7 +199,7 @@ def _save_quota(log, inDB, quota):
 @app.route('/renew', methods=['GET'])
 def reNewToken():
     if request.method == 'GET':
-        flow = pt.getFlowObject(CLIENT_SECRET_FILE)
+        flow = pt.getFlowObject(config.oauth.to_client_secret_dict())
         flow.run_local_server()
         flow.authorized_session()
         credentials = flow.credentials
@@ -247,7 +241,7 @@ def initWatchLater(log):
 
 def getYoutubeObj(log):
     """Build and return a YouTube API client."""
-    youtube = pt.get_youtube_client(config.oauth_port, CLIENT_SECRET_FILE)
+    youtube = pt.get_youtube_client(config.oauth_port, config.oauth.to_client_secret_dict())
     log.info("YouTube client obtained!")
     return youtube
 
