@@ -12,3 +12,4 @@ docker_pwd.txt
 *.pyc
 logs
 logs/*
+instance/*
