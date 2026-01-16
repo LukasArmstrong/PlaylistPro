@@ -20,6 +20,36 @@ from .utils import checkType, durationString2Sec, dateString2EpochTime, sanitize
 # Global strike counter
 gNumStrikes = 3
 
+# Cached YouTube client
+_youtube_client = None
+
+
+def get_youtube_client(port_number, client_secret_file, force_refresh=False):
+    """
+    Get a YouTube API client, with optional caching.
+
+    Args:
+        port_number: Port for OAuth flow
+        client_secret_file: Path to client secret JSON
+        force_refresh: If True, create a new client even if cached
+
+    Returns:
+        googleapiclient.discovery.Resource: YouTube API client
+    """
+    global _youtube_client
+    gLogger = getLogger()
+
+    if _youtube_client is not None and not force_refresh:
+        gLogger.debug("Returning cached YouTube client")
+        return _youtube_client
+
+    gLogger.debug("Building new YouTube client...")
+    credentials = getCredentials(port_number, client_secret_file)
+    _youtube_client = gacd.build("youtube", "v3", credentials=credentials)
+    gLogger.info("YouTube client built successfully")
+
+    return _youtube_client
+
 
 def getCredentials(portNumber, clientSecretFile):
     """Get or refresh OAuth2 credentials for YouTube API."""

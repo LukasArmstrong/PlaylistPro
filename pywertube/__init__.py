@@ -59,6 +59,7 @@ from .quota import (
 
 # YouTube API
 from .youtube_api import (
+    get_youtube_client,
     getCredentials,
     getFlowObject,
     saveCredentails,
@@ -145,6 +146,7 @@ __all__ = [
     'getQuotaUsed',
     'setQuotaUsed',
     # YouTube API
+    'get_youtube_client',
     'getCredentials',
     'getFlowObject',
     'saveCredentails',

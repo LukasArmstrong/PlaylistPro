@@ -9,7 +9,6 @@ from flask import Flask, request, render_template, flash
 import pywertube as pt
 import os
 from datetime import datetime as dt
-from googleapiclient.discovery import build
 
 # Set Logger
 if 'TERM_PROGRAM' in os.environ.keys() and os.environ['TERM_PROGRAM'] == 'vscode':
@@ -125,11 +124,8 @@ def subscribe():
     pt.setLogger(subLog)
     subLog.info("subLogger set as logger!")
 
-    activeCredentials = pt.getCredentials(portNumber, 'youtube_user_client_secret.json')
-    subLog.info("Credentials obtained!")
-
-    youtube = build("youtube", "v3", credentials=activeCredentials)
-    subLog.info("Youtube object built!")
+    youtube = pt.get_youtube_client(portNumber, 'youtube_user_client_secret.json')
+    subLog.info("YouTube client obtained!")
 
     subs = pt.getSubscriptions(youtube, mine=True)
     pt.storeSubscripton(subs, youtube)
@@ -285,12 +281,8 @@ def initWatchLater(log):
 
 def getYoutubeObj(log):
     """Build and return a YouTube API client."""
-    activeCredentials = pt.getCredentials(portNumber, 'youtube_user_client_secret.json')
-    log.info("Credentials obtained!")
-
-    youtube = build("youtube", "v3", credentials=activeCredentials)
-    log.info("Youtube object built!")
-
+    youtube = pt.get_youtube_client(portNumber, 'youtube_user_client_secret.json')
+    log.info("YouTube client obtained!")
     return youtube
 
 
