@@ -75,6 +75,12 @@ pt.init_db(app)
 logger.info("Database initialized!")
 
 
+@app.context_processor
+def inject_config():
+    """Make config available in all templates."""
+    return {'config': config}
+
+
 @app.route('/', methods=('GET', 'POST'))
 def index():
     if request.method == 'POST':
@@ -498,6 +504,7 @@ def api_add_keyphrase():
 
 
 @app.route('/api/admin/keyphrases/<int:id>', methods=['PUT'])
+@admin_required
 def api_update_keyphrase(id):
     """Update a keyphrase's score."""
     data = request.get_json()
@@ -513,6 +520,7 @@ def api_update_keyphrase(id):
 
 
 @app.route('/api/admin/keyphrases/<int:id>', methods=['DELETE'])
+@admin_required
 def api_delete_keyphrase(id):
     """Delete a keyphrase."""
     phrase = pt.Keyphrase.query.get_or_404(id)
@@ -526,6 +534,7 @@ def api_delete_keyphrase(id):
 
 
 @app.route('/api/admin/sequential', methods=['POST'])
+@admin_required
 def api_add_sequential():
     """Add a sequential creator."""
     data = request.get_json()
@@ -543,6 +552,7 @@ def api_add_sequential():
 
 
 @app.route('/api/admin/sequential/<int:id>', methods=['DELETE'])
+@admin_required
 def api_delete_sequential(id):
     """Remove a sequential creator."""
     seq = pt.SequentialCreator.query.get_or_404(id)
