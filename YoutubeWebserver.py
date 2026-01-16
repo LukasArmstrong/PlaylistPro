@@ -120,7 +120,18 @@ def logout():
 def dashboard():
     """Dashboard with stats and visualizations."""
     # Get recent stats from database
-    stats = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).limit(30).all()
+    stats_query = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).limit(30).all()
+
+    # Convert to dicts for JSON serialization in template
+    stats = [{
+        'Date': s.Date,
+        'Length': s.Length,
+        'TotalDuration': s.TotalDuration,
+        'AverageDuration': s.AverageDuration,
+        'MedianDuration': s.MedianDuration,
+        'StdvDuration': s.StdvDuration,
+        'NumUniqueCreators': s.NumUniqueCreators
+    } for s in stats_query]
 
     # Get creator stats for the most recent date
     latest_date = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).first()
