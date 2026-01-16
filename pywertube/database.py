@@ -52,10 +52,13 @@ def get_order_videos_list():
     videos = OrderVideo.query.all()
     if not videos:
         return []
-    ids = [v.id for v in videos]
+    # Use videoID as identifier (no longer using separate id column)
     video_ids = [v.videoID for v in videos]
     predecent_ids = [v.predecentVideoID for v in videos]
-    return [ids, video_ids, predecent_ids]
+    # Return format: [indices, video_ids, predecent_ids]
+    # Use enumerate index instead of db id for compatibility
+    indices = list(range(len(videos)))
+    return [indices, video_ids, predecent_ids]
 
 
 def clear_watch_later():

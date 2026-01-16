@@ -46,10 +46,11 @@ class WatchLaterVideo(db.Model):
 
     __tablename__ = 'WatchLaterList'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # Use videoID as primary key - matches existing MariaDB schema
+    # and avoids RETURNING clause issues
     position = db.Column(db.Integer, nullable=False)
     playlistID = db.Column(db.String(100))
-    videoID = db.Column(db.String(50), nullable=False, unique=True)
+    videoID = db.Column(db.String(50), primary_key=True, nullable=False)
     duration = db.Column(db.Float)
     creator = db.Column(db.String(255))
     publishedTimeUTC = db.Column(db.BigInteger)
@@ -89,8 +90,8 @@ class OrderVideo(db.Model):
 
     __tablename__ = 'OrderVideos'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    videoID = db.Column(db.String(50), nullable=False)
+    # Use videoID as primary key - matches existing MariaDB schema
+    videoID = db.Column(db.String(50), primary_key=True, nullable=False)
     predecentVideoID = db.Column(db.String(50), nullable=True)
 
     def __repr__(self):
