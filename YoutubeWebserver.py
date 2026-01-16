@@ -40,7 +40,7 @@ serializedKeywords = []
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
 
 # Configure database based on environment
 # Detection priority:
@@ -138,84 +138,106 @@ def subscribe():
     return "subscribers updated"
 
 
+class SortError(Exception):
+    """Custom exception for sort operation failures."""
+    pass
+
+
 def sort():
     """Main sorting function - orchestrates the playlist sorting process."""
-    msg = ""
+    if request.method != 'POST':
+        return
+
     sortLog = logger.bind()
     pt.setLogger(sortLog)
-    sortLog.info("sortLogger set as logger!")
+    sortLog.info("Starting playlist sort operation")
 
-    if request.method == 'POST':
-        sortLog.info("Entering POST Request")
-        try:
-            # Load data from database using ORM
-            creatorDictionary, keywordDictionary, videoFollowUpList, sequentialCreatorsDict, quota, inDB = initWatchLater(sortLog)
+    messages = []
+    quota = 0
+    inDB = False
 
-            try:
-                youtube = getYoutubeObj(logger)
-                youtubeWatchLater, requestOps = pt.getWatchLater(youtube, playlistID, True)
-                quota += requestOps
-                sortLog.info(f"Youtube Watchlater Obtained! Quota incurred: {requestOps}, Total: {quota}")
+    # Step 1: Load data from database
+    try:
+        creatorDictionary, keywordDictionary, videoFollowUpList, sequentialCreatorsDict, quota, inDB = initWatchLater(sortLog)
+    except Exception as e:
+        sortLog.error(f"Failed to load data from database: {e}", exc_info=True)
+        flash("Error: Could not load data from database. Check logs for details.")
+        return
 
-                try:
-                    sortedWatchLater = pt.sortWatchLater(
-                        youtubeWatchLater,
-                        creatorDictionary,
-                        keywordDictionary,
-                        numberedSerializedKeywords,
-                        serializedKeywords,
-                        videoFollowUpList,
-                        sequentialCreatorsDict
-                    )
-                    sortLog.info("Watchlater sorted!")
+    # Step 2: Get YouTube credentials and watch later list
+    try:
+        youtube = getYoutubeObj(sortLog)
+        youtubeWatchLater, requestOps = pt.getWatchLater(youtube, playlistID, True)
+        quota += requestOps
+        sortLog.info(f"Watch later obtained. Quota used: {requestOps}, Total: {quota}")
+    except Exception as e:
+        sortLog.error(f"Failed to get YouTube data: {e}", exc_info=True)
+        _save_quota(sortLog, inDB, quota)
+        flash("Error: Could not connect to YouTube API. Check credentials and try again.")
+        return
 
-                    try:
-                        videoOps, youtubeWatchLater = pt.updatePlaylist(
-                            youtubeWatchLater,
-                            sortedWatchLater,
-                            youtube,
-                            playlistID
-                        )
-                        quota += videoOps * 50
-                        sortLog.info(f"Watchlater updated on youtube! Quota incurred: {videoOps*50}, Total: {quota}")
+    # Step 3: Sort the watch later list
+    try:
+        sortedWatchLater = pt.sortWatchLater(
+            youtubeWatchLater,
+            creatorDictionary,
+            keywordDictionary,
+            numberedSerializedKeywords,
+            serializedKeywords,
+            videoFollowUpList,
+            sequentialCreatorsDict
+        )
+        sortLog.info("Watch later list sorted successfully")
+    except Exception as e:
+        sortLog.error(f"Failed to sort watch later list: {e}", exc_info=True)
+        _save_quota(sortLog, inDB, quota)
+        flash("Error: Sorting algorithm failed. Check logs for details.")
+        return
 
-                        youtubeWatchLater = pt.renumberWatchLater(youtubeWatchLater)
-                        sortLog.debug("Watchlater renumbered for DB storage!")
-                        msg = "Sorted! \n"
+    # Step 4: Update playlist on YouTube
+    try:
+        videoOps, youtubeWatchLater = pt.updatePlaylist(
+            youtubeWatchLater,
+            sortedWatchLater,
+            youtube,
+            playlistID
+        )
+        quota += videoOps * 50
+        sortLog.info(f"Playlist updated on YouTube. Operations: {videoOps}, Quota used: {videoOps * 50}, Total: {quota}")
+        messages.append("Playlist sorted successfully!")
+    except Exception as e:
+        sortLog.error(f"Failed to update YouTube playlist: {e}", exc_info=True)
+        _save_quota(sortLog, inDB, quota)
+        flash("Error: Could not update playlist on YouTube. Check logs for details.")
+        return
 
-                        try:
-                            pt.storeWatchLaterDB(youtubeWatchLater)
-                            sortLog.info("Watchlater stored in DB for stats!")
+    # Step 5: Store statistics (non-critical - don't fail the whole operation)
+    youtubeWatchLater = pt.renumberWatchLater(youtubeWatchLater)
+    try:
+        pt.storeWatchLaterDB(youtubeWatchLater)
+        datetime_str = dt.now().strftime('%Y-%m-%d %H:%M:%S')
+        pt.WatchLaterStats(youtubeWatchLater, datetime_str)
+        quota += pt.WatchLaterCreatorStats(youtubeWatchLater, datetime_str, youtube)
+        sortLog.info("Statistics stored in database")
+        messages.append("Statistics saved.")
+    except Exception as e:
+        sortLog.warning(f"Failed to store statistics (non-critical): {e}", exc_info=True)
+        messages.append("Warning: Could not save statistics.")
 
-                            datetime_str = dt.now().strftime('%Y-%m-%d %H:%M:%S')
-                            pt.WatchLaterStats(youtubeWatchLater, datetime_str)
-                            quota += pt.WatchLaterCreatorStats(youtubeWatchLater, datetime_str, youtube)
-                            msg += "Stored!\n"
-                        except Exception as e:
-                            msg += "Error storing stats!\n"
-                            sortLog.error(f"Error: {e}")
-                    except Exception as e:
-                        msg += "Error updating yt watch later!\n"
-                        sortLog.error(f"Error: {e}")
-                except Exception as e:
-                    msg += "Error sorting Watch Later!\n"
-                    sortLog.error(f"Error: {e}")
-            except Exception as e:
-                msg += "Error getting yt credentials or watchlater list!\n"
-                sortLog.error(f"Error: {e}")
-        except Exception as e:
-            msg += "Error getting data from DB!\n"
-            sortLog.error(f"Error: {e}")
+    # Save quota usage
+    _save_quota(sortLog, inDB, quota)
+    messages.append(f"Quota used: {quota}")
 
-        try:
-            pt.setQuotaUsed(inDB, quota, 1)
-            sortLog.info(f"Used Quota set! Total accrued: {quota}")
-            sortLog.info("Watch later stats stored")
-            msg += f"Quota Saved! Accrued: {quota}\n"
-        except Exception:
-            msg += "Error setting data in DB \n"
+    flash(" ".join(messages))
 
-        flash(msg)
+
+def _save_quota(log, inDB, quota):
+    """Helper to save quota usage, with error handling."""
+    try:
+        pt.setQuotaUsed(inDB, quota, 1)
+        log.info(f"Quota saved: {quota}")
+    except Exception as e:
+        log.warning(f"Failed to save quota (non-critical): {e}")
 
 
 @app.route('/renew', methods=['GET'])
