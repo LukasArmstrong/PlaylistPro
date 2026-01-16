@@ -130,7 +130,11 @@ def dashboard():
             date=latest_date.Date
         ).order_by(pt.WatchLaterCreatorStat.Frequency.desc()).limit(10).all()
 
-    return render_template('dashboard.html', stats=stats, creator_stats=creator_stats)
+    # Build creators map for looking up creator names by ID
+    creators = pt.Creator.query.all()
+    creators_map = {c.id: c for c in creators}
+
+    return render_template('dashboard.html', stats=stats, creator_stats=creator_stats, creators_map=creators_map)
 
 
 @app.route('/admin')
