@@ -114,13 +114,13 @@ def saveCredentails(credentials: Credentials) -> None:
         pickle.dump(credentials, f)
 
 
-def getWatchLater(youtube, playlistID, nextPageBoolean):
+def getWatchLater(youtube: gacd.Resource, playlistID: str, nextPageBoolean: bool) -> tuple[list[VideoTuple], int]:
     """Fetch the watch later playlist from YouTube."""
     gLogger = getLogger()
-    nextPageToken = None
-    numberRequest = 0
-    watchLaterList = []
-    errorCount = 0
+    nextPageToken: Optional[str] = None
+    numberRequest: int = 0
+    watchLaterList: list[VideoTuple] = []
+    errorCount: int = 0
 
     while True:
         pl_request = youtube.playlistItems().list(
@@ -177,7 +177,7 @@ def getWatchLater(youtube, playlistID, nextPageBoolean):
     return watchLaterList, numberRequest
 
 
-def updatePlaylist(watchLater, sortedWatchLater, youtube, playlistID):
+def updatePlaylist(watchLater: list[VideoTuple], sortedWatchLater: list[VideoTuple], youtube: gacd.Resource, playlistID: str) -> tuple[int, list[VideoTuple]]:
     """Update the YouTube playlist order to match the sorted order."""
     gLogger = getLogger()
     checkType(watchLater, list)
@@ -189,8 +189,8 @@ def updatePlaylist(watchLater, sortedWatchLater, youtube, playlistID):
                       original=len(watchLater), sorted=len(sortedWatchLater))
         raise ValueError("Lists must have the same size")
 
-    numOperations = 0
-    errorCount = 0
+    numOperations: int = 0
+    errorCount: int = 0
 
     for x in range(len(watchLater)):
         if watchLater[x] != sortedWatchLater[x]:
@@ -226,7 +226,7 @@ def updatePlaylist(watchLater, sortedWatchLater, youtube, playlistID):
     return numOperations, watchLater
 
 
-def findChannelID(creator, youtube):
+def findChannelID(creator: str, youtube: gacd.Resource) -> str:
     """Search for a YouTube channel ID by creator name."""
     gLogger = getLogger()
     checkType(creator, str)
@@ -250,7 +250,7 @@ def findChannelID(creator, youtube):
         return ""
 
 
-def getVideoYT(youtube, videoID):
+def getVideoYT(youtube: gacd.Resource, videoID: str) -> dict[str, Any]:
     """Get video details from YouTube API."""
     gLogger = getLogger()
 
@@ -276,11 +276,11 @@ def getVideoYT(youtube, videoID):
     }
 
 
-def getSubscriptions(youtube, mine=True, channel_id=None):
+def getSubscriptions(youtube: gacd.Resource, mine: bool = True, channel_id: Optional[str] = None) -> list[dict[str, Any]]:
     """Get the user's YouTube subscriptions."""
     gLogger = getLogger()
-    nextPageToken = None
-    subs = []
+    nextPageToken: Optional[str] = None
+    subs: list[dict[str, Any]] = []
 
     while True:
         sub_request = youtube.subscriptions().list(
@@ -306,7 +306,7 @@ def getSubscriptions(youtube, mine=True, channel_id=None):
     return subs
 
 
-def insertVideoYT(youtube, playlistID, videoID, position=0):
+def insertVideoYT(youtube: gacd.Resource, playlistID: str, videoID: str, position: int = 0) -> None:
     """Insert a video into a YouTube playlist."""
     gLogger = getLogger()
 
@@ -333,12 +333,12 @@ def insertVideoYT(youtube, playlistID, videoID, position=0):
         raise RuntimeError(e)
 
 
-def storeSubscripton(subs, youtube):
+def storeSubscripton(subs: list[dict[str, Any]], youtube: gacd.Resource) -> None:
     """Store subscription data in the database."""
     gLogger = getLogger()
     creatorDict = getCreatorDictionary([], youtube)[0]
     lastID = max(creatorDict.values()) if creatorDict else 0
-    added = 0
+    added: int = 0
 
     for sub in subs:
         creator_name = sanitizeTitle(sub["snippet"]["title"])
@@ -353,8 +353,9 @@ def storeSubscripton(subs, youtube):
         gLogger.info("Stored new subscriptions", count=added)
 
 
-def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=False,
-                     unconditionalBool=False, sequentialBoolInt=False, youtube=None):
+def insertCreatorsDB(creator: str, priorirtyScore: int = 0, channel_id: Optional[str] = None,
+                     subscribedBool: bool = False, unconditionalBool: bool = False,
+                     sequentialBoolInt: bool = False, youtube: Optional[gacd.Resource] = None) -> None:
     """Insert a new creator into the database."""
     gLogger = getLogger()
 
@@ -378,7 +379,7 @@ def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=
         gLogger.error("Failed to insert creator", name=creator, error=str(e))
 
 
-def pubhubsubhubPost(mode, topic, callback):
+def pubhubsubhubPost(mode: str, topic: str, callback: str) -> None:
     """Subscribe to PubSubHubbub notifications for YouTube channels."""
     gLogger = getLogger()
     url = f'https://pubsubhubbub.appspot.com/subscribe?hub.callback={callback}&hub.mode={mode}&hub.verify=async&hub.lease=2629800&hub.topic={topic}'
@@ -388,12 +389,12 @@ def pubhubsubhubPost(mode, topic, callback):
                         mode=mode, status=response.status_code)
 
 
-def subscribeCreators():
+def subscribeCreators() -> None:
     """Subscribe to PubSubHubbub notifications for all subscribed creators."""
     gLogger = getLogger()
     subscribed_creators = Creator.query.filter_by(subscribed=True).all()
 
-    count = 0
+    count: int = 0
     for creator in subscribed_creators:
         if creator.channelId:
             topic = f'https://www.youtube.com/feeds/videos.xml?channel_id={creator.channelId}'

@@ -5,6 +5,8 @@ This module contains helper functions for type checking, data conversion,
 configuration loading, and statistics generation.
 """
 
+from __future__ import annotations
+
 import datetime as dt
 import pickle
 import re
@@ -13,13 +15,19 @@ import operator
 import yaml
 import json
 import statistics as stats
+from typing import Any, Optional
+
 from dotenv import load_dotenv
 
 from .logging_config import getLogger
 
 load_dotenv()
 
-def checkType(var, expected_type):
+# Type aliases
+VideoTuple = tuple[int, str, str, float, str, float, str]
+
+
+def checkType(var: Any, expected_type: type) -> None:
     """Validate that a variable is of the expected type."""
     if not isinstance(var, expected_type):
         gLogger = getLogger()
@@ -27,12 +35,12 @@ def checkType(var, expected_type):
         raise TypeError(f"{var} not of type: {expected_type}!")
 
 
-def checkTypeReturn(var, expected_type):
+def checkTypeReturn(var: Any, expected_type: type) -> bool:
     """Check if a variable is of the expected type and return boolean."""
     return isinstance(var, expected_type)
 
 
-def renumberWatchLater(watchLater):
+def renumberWatchLater(watchLater: list[VideoTuple]) -> list[VideoTuple]:
     """Renumber the positions in a watch later list."""
     checkType(watchLater, list)
     for x in range(len(watchLater)):
@@ -40,7 +48,7 @@ def renumberWatchLater(watchLater):
     return watchLater
 
 
-def getProjectVariablesYAML(file):
+def getProjectVariablesYAML(file: str) -> tuple[Any, ...]:
     """Load project variables from a YAML file."""
     checkType(file, str)
     with open(file, 'r') as f:
@@ -48,10 +56,8 @@ def getProjectVariablesYAML(file):
     return tuple(projectVariables.values())
 
 
-def getProjectVariablesENV():
+def getProjectVariablesENV() -> tuple[Optional[str], int, Optional[str], Optional[str], Optional[str], str, int, int, int, Optional[str]]:
     """Load project variables from environment variables."""
-    gLogger = getLogger()
-    gLogger.debug("Entering...")
     database = os.environ.get('DATABASE')
     mariaPort = int(os.environ.get('DATABASE_PORT', 3306))
     password = os.environ.get('DATABASE_PASSWORD')
@@ -65,7 +71,12 @@ def getProjectVariablesENV():
     return (database, mariaPort, password, serverIp, user, hostIP, hostPort, projectID, portNumber, playlistID)
 
 
-def durationString2Sec(durationString, hours_pattern=re.compile(r'(\d+)H'), minutes_pattern=re.compile(r'(\d+)M'), seconds_pattern=re.compile(r'(\d+)S')):
+def durationString2Sec(
+    durationString: str,
+    hours_pattern: re.Pattern[str] = re.compile(r'(\d+)H'),
+    minutes_pattern: re.Pattern[str] = re.compile(r'(\d+)M'),
+    seconds_pattern: re.Pattern[str] = re.compile(r'(\d+)S')
+) -> float:
     """Convert YouTube duration string (ISO 8601) to seconds."""
     checkType(durationString, str)
 
@@ -80,7 +91,7 @@ def durationString2Sec(durationString, hours_pattern=re.compile(r'(\d+)H'), minu
     return dt.timedelta(hours=hours, minutes=minutes, seconds=seconds).total_seconds()
 
 
-def dateString2EpochTime(dateString, time_pattern="%Y-%m-%dT%H:%M:%SZ"):
+def dateString2EpochTime(dateString: str, time_pattern: str = "%Y-%m-%dT%H:%M:%SZ") -> float:
     """Convert a date string to Unix epoch time."""
     checkType(dateString, str)
     d = dt.datetime.strptime(dateString, time_pattern)
@@ -88,7 +99,7 @@ def dateString2EpochTime(dateString, time_pattern="%Y-%m-%dT%H:%M:%SZ"):
     return (d - epoch).total_seconds()
 
 
-def filterDict(_dict, string, threshold):
+def filterDict(_dict: dict[str, int], string: str, threshold: int) -> dict[str, int]:
     """Filter a dictionary based on a comparison operator and threshold."""
     checkType(_dict, dict)
     checkType(string, str)
@@ -104,7 +115,7 @@ def filterDict(_dict, string, threshold):
     return {key: value for key, value in _dict.items() if not ops[string](value, threshold)}
 
 
-def sanitizeTitle(string):
+def sanitizeTitle(string: str) -> str:
     """Remove special characters from a title string."""
     checkType(string, str)
     for char in '",\',?':
@@ -112,7 +123,7 @@ def sanitizeTitle(string):
     return string
 
 
-def getCreatorDictionary(creatorList, youtube):
+def getCreatorDictionary(creatorList: list[str], youtube: Any) -> tuple[dict[str, int], int]:
     """Build a dictionary mapping creator names to IDs."""
     # Import here to avoid circular dependency
     from .database import get_creator_id_map, add_creator
@@ -142,7 +153,7 @@ def getCreatorDictionary(creatorList, youtube):
     return creatorDict, new_creators * 100
 
 
-def WatchLaterStats(watchLater, datetime_str):
+def WatchLaterStats(watchLater: list[VideoTuple], datetime_str: str) -> None:
     """Calculate and store statistics about the watch later list."""
     # Import here to avoid circular dependency
     from .database import add_watch_later_stat
@@ -165,7 +176,7 @@ def WatchLaterStats(watchLater, datetime_str):
     )
 
 
-def WatchLaterCreatorStats(watchLater, datetime_str, youtube):
+def WatchLaterCreatorStats(watchLater: list[VideoTuple], datetime_str: str, youtube: Any) -> int:
     """Calculate and store per-creator statistics."""
     # Import here to avoid circular dependency
     from .database import add_creator_stat
@@ -202,19 +213,19 @@ def WatchLaterCreatorStats(watchLater, datetime_str, youtube):
     return quotaUsed
 
 
-def createJsonFile(file, data_dict):
+def createJsonFile(file: str, data_dict: dict[str, Any]) -> None:
     """Write a dictionary to a JSON file."""
     with open(file, 'w') as outfile:
         json.dump(data_dict, outfile, indent=4)
 
 
-def createYamlFile(file, data_dict):
+def createYamlFile(file: str, data_dict: dict[str, Any]) -> None:
     """Write a dictionary to a YAML file."""
     with open(file, 'w') as yaml_file:
         yaml.dump(data_dict, yaml_file, default_flow_style=False)
 
 
-def pickleSomething(thing, nameString):
+def pickleSomething(thing: Any, nameString: str) -> None:
     """Pickle an object and save it to a file."""
     os.makedirs("pickles", exist_ok=True)
     with open(f"pickles/{nameString}.pickle", "wb") as f:

@@ -5,15 +5,29 @@ This module contains the logic for prioritizing and ordering videos
 based on creator preferences, series detection, and other criteria.
 """
 
+from __future__ import annotations
+
 import re
+from typing import Any, Optional
+
 from natsort import natsorted
 
 from .logging_config import getLogger
 from .database import clearTableDB
 from .utils import checkType, filterDict
 
+# Type aliases
+VideoTuple = tuple[int, str, str, float, str, float, str]
+FollowUpList = list[list[int] | list[str] | list[Optional[int]]]
 
-def getPriorityVideos(watchLaterList, creatorDict, keywordDict, priorityThreshold, durationThreshold):
+
+def getPriorityVideos(
+    watchLaterList: list[VideoTuple],
+    creatorDict: dict[str, int],
+    keywordDict: dict[str, int],
+    priorityThreshold: int,
+    durationThreshold: float
+) -> tuple[list[list[VideoTuple]], list[VideoTuple]]:
     """
     Filter and categorize videos by priority based on creator and keyword scores.
 
@@ -65,7 +79,11 @@ def getPriorityVideos(watchLaterList, creatorDict, keywordDict, priorityThreshol
     return priorityWatchLater, nonPriority
 
 
-def getSerializedVideos(watchLaterList, numSerKeywords, serKeywords):
+def getSerializedVideos(
+    watchLaterList: list[VideoTuple],
+    numSerKeywords: list[str],
+    serKeywords: list[str]
+) -> tuple[list[list[VideoTuple]], list[VideoTuple]]:
     """
     Extract videos that are part of a series based on keywords.
 
@@ -100,7 +118,11 @@ def getSerializedVideos(watchLaterList, numSerKeywords, serKeywords):
     return seriesList, nonSerialized
 
 
-def getSequentialVideos(watchLaterList, sequentialCreatorsDict, durationThreshold):
+def getSequentialVideos(
+    watchLaterList: list[VideoTuple],
+    sequentialCreatorsDict: dict[str, Any],
+    durationThreshold: float
+) -> tuple[list[list[VideoTuple]], list[VideoTuple]]:
     """
     Extract videos from creators whose content should be watched in order.
 
@@ -129,7 +151,7 @@ def getSequentialVideos(watchLaterList, sequentialCreatorsDict, durationThreshol
     return seqList, nonSequential
 
 
-def getFollowUpVideos(watchLaterList, FollowUpIDList):
+def getFollowUpVideos(watchLaterList: list[VideoTuple], FollowUpIDList: FollowUpList) -> list[list[VideoTuple]]:
     """
     Extract videos that are follow-ups to other videos.
 
@@ -163,7 +185,7 @@ def getFollowUpVideos(watchLaterList, FollowUpIDList):
     return FollowUpWatchLater
 
 
-def sortSeriesVideos(watchLaterList):
+def sortSeriesVideos(watchLaterList: list[list[VideoTuple]]) -> list[list[VideoTuple]]:
     """Sort videos within each series using natural sort on title."""
     for index in range(len(watchLaterList)):
         if watchLaterList[index]:
@@ -174,14 +196,22 @@ def sortSeriesVideos(watchLaterList):
     return watchLaterList
 
 
-def sortSequentialVideo(watchLaterList):
+def sortSequentialVideo(watchLaterList: list[list[VideoTuple]]) -> list[list[VideoTuple]]:
     """Sort sequential videos by publish time (oldest first)."""
     for index in range(len(watchLaterList)):
         watchLaterList[index] = sorted(watchLaterList[index], key=lambda x: x[5])
     return watchLaterList
 
 
-def sortWatchLater(watchLaterList, creatorDict, keywordDict, numSerKeywords, serKeywords, videoIDFollowUpList, sequentialCreators):
+def sortWatchLater(
+    watchLaterList: list[VideoTuple],
+    creatorDict: dict[str, int],
+    keywordDict: dict[str, int],
+    numSerKeywords: list[str],
+    serKeywords: list[str],
+    videoIDFollowUpList: FollowUpList | list,
+    sequentialCreators: dict[str, Any]
+) -> list[VideoTuple]:
     """
     Main sorting function that orchestrates all sorting strategies.
 
