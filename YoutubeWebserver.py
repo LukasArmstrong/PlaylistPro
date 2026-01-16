@@ -5,78 +5,44 @@ A Flask application for managing and sorting YouTube playlists.
 Supports SQLite (default) and MariaDB/MySQL databases.
 """
 
-from flask import Flask, request, render_template, flash
-import pywertube as pt
 import os
+from flask import Flask, request, render_template, flash
 from datetime import datetime as dt
 
-# Set Logger
-if 'TERM_PROGRAM' in os.environ.keys() and os.environ['TERM_PROGRAM'] == 'vscode':
-    logger = pt.initLogger(__file__, debug=True, verbose=False)
-else:
-    logger = pt.initLogger(__file__, debug=os.environ.get('DEBUG_MODE', False), verbose=os.environ.get('VERBOSE_DEBUG', False))
+import pywertube as pt
+from pywertube import config
 
-# Load environment variables
-database, mariaPort, password, serverIp, user, host_ip, host_port, projectID, portNumber, playlistID = pt.getProjectVariablesENV()
-
-# Build client secret for OAuth
-client_secret_dict = {
-    'web': {
-        'client_id': os.environ.get('CLIENT_ID'),
-        'project_id': os.environ.get('PROJECT_ID'),
-        'auth_uri': os.environ.get('AUTH_URI'),
-        'token_uri': os.environ.get('TOKEN_URI'),
-        'auth_provider_x509_cert_url': os.environ.get('AUTH_PROVIDER'),
-        'client_secret': os.environ.get('CLIENT_SECRET'),
-        'redirect_uris': os.environ.get('REDIRECT_URIS', '').split(',')
-    }
-}
-pt.createJsonFile('youtube_user_client_secret.json', client_secret_dict)
+# Client secret file path
+CLIENT_SECRET_FILE = 'youtube_user_client_secret.json'
 
 # Sorting keywords
-numberedSerializedKeywords = ['series', 'part', 'finale', 'episode', 'ep', '#', 'chapter']
-serializedKeywords = []
+NUMBERED_SERIALIZED_KEYWORDS = ['series', 'part', 'finale', 'episode', 'ep', '#', 'chapter']
+SERIALIZED_KEYWORDS = []
+
+# Set up logger
+if os.environ.get('TERM_PROGRAM') == 'vscode':
+    logger = pt.initLogger(__file__, debug=True, verbose=False)
+else:
+    logger = pt.initLogger(__file__, debug=config.debug_mode, verbose=config.verbose_debug)
+
+# Write client secret file for OAuth
+pt.createJsonFile(CLIENT_SECRET_FILE, config.oauth.to_client_secret_dict())
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
+app.secret_key = config.secret_key or os.urandom(24)
 
-# Configure database based on environment
-# Detection priority:
-# 1. Explicit DATABASE_URL environment variable (production/docker)
-# 2. ENVIRONMENT variable set to 'production' + MariaDB env vars
-# 3. Default to SQLite (development)
+# Configure database
+database_url = config.database.get_url()
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-def get_database_url():
-    """Determine the database URL based on environment."""
-    # Check for explicit DATABASE_URL first (docker-compose, etc.)
-    if os.environ.get('DATABASE_URL'):
-        return os.environ.get('DATABASE_URL'), 'production'
-
-    # Check if we're in production mode with MariaDB env vars
-    env = os.environ.get('ENVIRONMENT', os.environ.get('FLASK_ENV', 'development'))
-    is_production = env.lower() in ('production', 'prod', 'docker')
-
-    if is_production and all([serverIp, user, password, database]):
-        # Build URL from individual MariaDB environment variables
-        url = f"mysql+pymysql://{user}:{password}@{serverIp}:{mariaPort}/{database}"
-        return url, 'production'
-
-    # Default to SQLite for development
-    return 'sqlite:///playlistpro.db', 'development'
-
-
-database_url, environment = get_database_url()
-
-if environment == 'development':
+if config.database.is_sqlite:
     logger.info("Development mode: Using SQLite database")
 else:
     # Log URL without password for security
     safe_url = database_url.split('@')[-1] if '@' in database_url else database_url
     logger.info(f"Production mode: Using database at {safe_url}")
-
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database with Flask app
 pt.init_db(app)
@@ -124,7 +90,7 @@ def subscribe():
     pt.setLogger(subLog)
     subLog.info("subLogger set as logger!")
 
-    youtube = pt.get_youtube_client(portNumber, 'youtube_user_client_secret.json')
+    youtube = pt.get_youtube_client(config.oauth_port, CLIENT_SECRET_FILE)
     subLog.info("YouTube client obtained!")
 
     subs = pt.getSubscriptions(youtube, mine=True)
@@ -163,7 +129,7 @@ def sort():
     # Step 2: Get YouTube credentials and watch later list
     try:
         youtube = getYoutubeObj(sortLog)
-        youtubeWatchLater, requestOps = pt.getWatchLater(youtube, playlistID, True)
+        youtubeWatchLater, requestOps = pt.getWatchLater(youtube, config.playlist_id, True)
         quota += requestOps
         sortLog.info(f"Watch later obtained. Quota used: {requestOps}, Total: {quota}")
     except Exception as e:
@@ -178,8 +144,8 @@ def sort():
             youtubeWatchLater,
             creatorDictionary,
             keywordDictionary,
-            numberedSerializedKeywords,
-            serializedKeywords,
+            NUMBERED_SERIALIZED_KEYWORDS,
+            SERIALIZED_KEYWORDS,
             videoFollowUpList,
             sequentialCreatorsDict
         )
@@ -196,7 +162,7 @@ def sort():
             youtubeWatchLater,
             sortedWatchLater,
             youtube,
-            playlistID
+            config.playlist_id
         )
         quota += videoOps * 50
         sortLog.info(f"Playlist updated on YouTube. Operations: {videoOps}, Quota used: {videoOps * 50}, Total: {quota}")
@@ -230,7 +196,7 @@ def sort():
 def _save_quota(log, inDB, quota):
     """Helper to save quota usage, with error handling."""
     try:
-        pt.setQuotaUsed(inDB, quota, 1)
+        pt.setQuotaUsed(inDB, quota, config.project_id)
         log.info(f"Quota saved: {quota}")
     except Exception as e:
         log.warning(f"Failed to save quota (non-critical): {e}")
@@ -239,7 +205,7 @@ def _save_quota(log, inDB, quota):
 @app.route('/renew', methods=['GET'])
 def reNewToken():
     if request.method == 'GET':
-        flow = pt.getFlowObject('youtube_user_client_secret.json')
+        flow = pt.getFlowObject(CLIENT_SECRET_FILE)
         flow.run_local_server()
         flow.authorized_session()
         credentials = flow.credentials
@@ -273,7 +239,7 @@ def initWatchLater(log):
     log.info("Sequential creators obtained!")
 
     # Get quota usage
-    quota, inDB = pt.getQuotaUsed(projectID)
+    quota, inDB = pt.getQuotaUsed(config.project_id)
     log.info(f"Used Quota obtained! So far incurred: {quota}")
 
     return creatorDictionary, keywordDictionary, videoFollowUpList, sequentialCreatorsDict, quota, inDB
@@ -281,10 +247,10 @@ def initWatchLater(log):
 
 def getYoutubeObj(log):
     """Build and return a YouTube API client."""
-    youtube = pt.get_youtube_client(portNumber, 'youtube_user_client_secret.json')
+    youtube = pt.get_youtube_client(config.oauth_port, CLIENT_SECRET_FILE)
     log.info("YouTube client obtained!")
     return youtube
 
 
 if __name__ == "__main__":
-    app.run(host=host_ip, port=host_port)
+    app.run(host=config.host, port=config.port)

@@ -5,6 +5,9 @@ A library for managing and sorting YouTube playlists.
 Supports SQLite (default) and MariaDB/MySQL via SQLAlchemy.
 """
 
+# Configuration
+from .config import config, load_config, AppConfig, DatabaseConfig, OAuthConfig
+
 # Database
 from .db import db, init_db
 
@@ -106,6 +109,12 @@ from .utils import (
 )
 
 __all__ = [
+    # Configuration
+    'config',
+    'load_config',
+    'AppConfig',
+    'DatabaseConfig',
+    'OAuthConfig',
     # Database core
     'db',
     'init_db',
