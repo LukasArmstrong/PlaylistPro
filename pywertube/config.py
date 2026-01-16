@@ -8,6 +8,9 @@ Import `config` to access settings throughout the application.
 import os
 from dataclasses import dataclass, field
 from typing import List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
