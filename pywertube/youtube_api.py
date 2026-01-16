@@ -17,8 +17,8 @@ from .db import db
 from .models import Creator
 from .utils import checkType, durationString2Sec, dateString2EpochTime, sanitizeTitle, getCreatorDictionary
 
-# Global strike counter
-gNumStrikes = 3
+# Maximum retries for API errors before failing
+MAX_RETRIES = 3
 
 # Cached YouTube client
 _youtube_client = None
@@ -40,13 +40,11 @@ def get_youtube_client(port_number, client_secret_file, force_refresh=False):
     gLogger = getLogger()
 
     if _youtube_client is not None and not force_refresh:
-        gLogger.debug("Returning cached YouTube client")
         return _youtube_client
 
-    gLogger.debug("Building new YouTube client...")
     credentials = getCredentials(port_number, client_secret_file)
     _youtube_client = gacd.build("youtube", "v3", credentials=credentials)
-    gLogger.info("YouTube client built successfully")
+    gLogger.info("YouTube API client initialized")
 
     return _youtube_client
 
@@ -54,48 +52,35 @@ def get_youtube_client(port_number, client_secret_file, force_refresh=False):
 def getCredentials(portNumber, clientSecretFile):
     """Get or refresh OAuth2 credentials for YouTube API."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
     credentials = None
-    # token.pickle stores the user's credentials from previously successful logins
-    gLogger.debug("Checking if token pickle exist...")
+
+    # Load existing credentials if available
     if os.path.exists("token.pickle"):
-        gLogger.debug("Loading credentials token from file...")
         with open("token.pickle", "rb") as token:
             credentials = pickle.load(token)
-        gLogger.debug("credentials token loaded")
-    # If there is no valid credentials available, then either refresh the token or log in.
-    gLogger.debug("Checking if credential token is valid...")
+
+    # Refresh or fetch new credentials if needed
     if not credentials or not credentials.valid:
-        gLogger.debug("Credential token not valid. Checking if expired...")
         if credentials and credentials.expired and credentials.refresh_token:
-            gLogger.debug("Credential token expired and can be refreshed...")
-            gLogger.debug("Refreshing access token...")
+            gLogger.info("Refreshing expired OAuth token")
             credentials.refresh(Request())
-            gLogger.debug("Token refreshed!")
             saveCredentails(credentials)
         else:
-            gLogger.debug("Credential token expired and can _not_ be refreshed...")
-            gLogger.debug("Fetching new token...")
+            gLogger.info("Initiating new OAuth flow")
             flow = getFlowObject(clientSecretFile)
-            gLogger.debug("Flow server created. Running...")
             flow.run_local_server(
                 port=portNumber,
                 prompt="consent",
                 authorization_prompt_message=""
             )
-            gLogger.debug("Obtaining credential token...")
             credentials = flow.credentials
-            gLogger.debug("Credential token obtained!")
             saveCredentails(credentials)
-    gLogger.debug("Returning credentials...")
+
     return credentials
 
 
 def getFlowObject(clientSecretFile):
     """Create an OAuth2 flow object for authentication."""
-    gLogger = getLogger()
-    gLogger.debug("Enter...")
-    gLogger.debug("Creating Flow object...")
     return InstalledAppFlow.from_client_secrets_file(
         clientSecretFile,
         scopes=["https://www.googleapis.com/auth/youtube",
@@ -106,112 +91,90 @@ def getFlowObject(clientSecretFile):
 
 def saveCredentails(credentials):
     """Save OAuth2 credentials to a pickle file."""
-    gLogger = getLogger()
-    gLogger.debug("Entering...")
-    # Save credentials for the next run
     with open("token.pickle", "wb") as f:
-        gLogger.debug("Saving credentials for future use...")
         pickle.dump(credentials, f)
-    gLogger.debug("Credentails Saved!")
-    gLogger.debug("Leaving...")
 
 
 def getWatchLater(youtube, playlistID, nextPageBoolean):
     """Fetch the watch later playlist from YouTube."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Initalizing variables...")
     nextPageToken = None
     numberRequest = 0
     watchLaterList = []
-    gLogger.debug("Getting List...")
+    errorCount = 0
+
     while True:
-        # Watch Later isn't available through the API, so have to use playlist as pseudo watch later list
-        gLogger.debug("Creating youtube playlist request...")
         pl_request = youtube.playlistItems().list(
             part="contentDetails, snippet",
             playlistId=playlistID,
-            maxResults=50,  # Youtube API won't allow more then 50 results per request
+            maxResults=50,
             pageToken=nextPageToken
         )
         try:
-            gLogger.debug("Executing youtube playlist request...")
             pl_response = pl_request.execute()
-            gLogger.debug("Playlist request executed!")
         except Exception as e:
-            gLogger.error(f"Error executing youtube playlist request. Type: {type(e)} Arguements:{e}")
+            gLogger.error("Failed to fetch playlist", playlist_id=playlistID, error=str(e))
             raise RuntimeError(e)
-        numberRequest += 1  # Tracking quota usage
-        gLogger.debug("Unpacking youtube playlist response...")
-        videoErrorCount = 0
+
+        numberRequest += 1
+
         for item in pl_response["items"]:
             video = (item["snippet"]["position"], item["id"], item["contentDetails"]["videoId"])
-            # Need more data to sort
-            gLogger.debug("Creating youtube video request...")
+
             vid_request = youtube.videos().list(
                 part="contentDetails, snippet",
                 id=item["contentDetails"]["videoId"],
             )
-            gLogger.debug("Executing youtube video request...")
             try:
                 vid_response = vid_request.execute()
-                gLogger.debug("Video request executed!")
             except Exception as e:
-                videoErrorCount += 1
-                if videoErrorCount > gNumStrikes:
-                    gLogger.error(f"Error executing youtube video request. All Strikes Used. Type: {type(e)} Arguements:{e}")
+                errorCount += 1
+                if errorCount > MAX_RETRIES:
+                    gLogger.error("Max retries exceeded fetching video details",
+                                  video_id=item["contentDetails"]["videoId"], error=str(e))
                     raise RuntimeError(e)
-                else:
-                    gLogger.warning(f"Unexcepted issue executing youtube video request. Strike: {videoErrorCount} Type: {type(e)} Arguements:{e}")
-                    pass
-            numberRequest += 1  # Tracking quota usage
-            gLogger.debug("Unpacking youtube video response...")
-            videoSnippet = ()
+                gLogger.warning("Retrying video fetch",
+                                video_id=item["contentDetails"]["videoId"],
+                                attempt=errorCount, error=str(e))
+                continue
+
+            numberRequest += 1
+
             for vid in vid_response["items"]:
-                gLogger.debug("Converting video duration to more useful format...")
                 duration = durationString2Sec(vid["contentDetails"]["duration"])
-                gLogger.debug("Converting video published date to more useful format...")
                 utcPublishedTime = dateString2EpochTime(vid["snippet"]["publishedAt"])
-                gLogger.debug("Video duration and publish time converted! Storing in tuple...")
                 videoSnippet = (duration, vid["snippet"]["channelTitle"], utcPublishedTime, vid["snippet"]["title"])
-            gLogger.debug("Combining video tuples...")
-            if videoSnippet:
                 video = video + videoSnippet
-                gLogger.debug("Adding video tuple to watch later list...")
                 watchLaterList.append(video)
-        gLogger.debug("Checking if should get next page...")
+
         if nextPageBoolean:
-            gLogger.debug("Getting next page token...")
             nextPageToken = pl_response.get('nextPageToken')
 
-        gLogger.debug("Checking if next page token exist...")
         if not nextPageToken:
-            gLogger.debug("Next page token doesn't exist, breaking out of loop...")
             break
-    gLogger.debug("Returning watch later list and number of requests...")
+
+    gLogger.info("Fetched watch later playlist",
+                 video_count=len(watchLaterList), api_requests=numberRequest)
     return watchLaterList, numberRequest
 
 
 def updatePlaylist(watchLater, sortedWatchLater, youtube, playlistID):
     """Update the YouTube playlist order to match the sorted order."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking types...")
     checkType(watchLater, list)
     checkType(sortedWatchLater, list)
     checkType(playlistID, str)
-    numOperations = 0
-    videoErrorCount = 0
-    gLogger.debug("Initialized variables...", numOperations=numOperations, videoErrorCount=0)
-    gLogger.debug("Checking length of watch later")
+
     if len(watchLater) != len(sortedWatchLater):
-        gLogger.error("Length of watch later lists don't match!", watchLater=watchLater, sortedWatchLater=sortedWatchLater)
+        gLogger.error("Playlist length mismatch",
+                      original=len(watchLater), sorted=len(sortedWatchLater))
         raise ValueError("Lists must have the same size")
-    gLogger.debug("Entering loop for watch later...")
+
+    numOperations = 0
+    errorCount = 0
+
     for x in range(len(watchLater)):
-        gLogger.debug("Checking if video position on YT wach later same as sorted watch later...")
-        if watchLater[x] != sortedWatchLater[x]:  # naive approach to save on quota
-            gLogger.debug("Creating update request..")
+        if watchLater[x] != sortedWatchLater[x]:
             update_request = youtube.playlistItems().update(
                 part="snippet",
                 body={
@@ -226,87 +189,64 @@ def updatePlaylist(watchLater, sortedWatchLater, youtube, playlistID):
                     }
                 }
             )
-            gLogger.debug("Attempting to execute update request...")
             try:
-                update_response = update_request.execute()
-                gLogger.debug("Execution Successful!")
-                try:
-                    gLogger.debug("incrementing num of operations...")
-                    numOperations += 1
-                    gLogger.debug("Moving video record to position in sorted list")
-                    watchLater.insert(x, watchLater.pop(watchLater.index(sortedWatchLater[x])))
-                except Exception as e:
-                    gLogger.error(f"Unexpect error updating watch later list! Type: {type(e)} Arguements:{e}")
+                update_request.execute()
+                numOperations += 1
+                watchLater.insert(x, watchLater.pop(watchLater.index(sortedWatchLater[x])))
             except Exception as e:
-                videoErrorCount += 1
-                if videoErrorCount > gNumStrikes:
-                    gLogger.error(f"Error executing youtube update request. All Strikes Used. Type: {type(e)} Arguements:{e}")
+                errorCount += 1
+                if errorCount > MAX_RETRIES:
+                    gLogger.error("Max retries exceeded updating playlist",
+                                  video_id=sortedWatchLater[x][2], error=str(e))
                     raise RuntimeError(e)
-                else:
-                    gLogger.warning(f"Unexcepted issue executing youtube update request. Strike: {videoErrorCount} Type: {type(e)} Arguements:{e}")
-                    pass
-                gLogger.error(f"Couldn't update {x[6]}. Type: {type(e)} Arguements:{e}")
-    gLogger.debug(f"Number of operations preformed: {numOperations}")
-    gLogger.debug("Leaving...")
+                gLogger.warning("Failed to move video",
+                                video_id=sortedWatchLater[x][2],
+                                position=x, error=str(e))
+
+    gLogger.info("Playlist updated", moves=numOperations, errors=errorCount)
     return numOperations, watchLater
 
 
 def findChannelID(creator, youtube):
     """Search for a YouTube channel ID by creator name."""
     gLogger = getLogger()
-    gLogger.debug("Entering...")
-    gLogger.debug("Checking Types...")
     checkType(creator, str)
     checkType(youtube, gacd.Resource)
-    gLogger.debug("Creating channel request...")
+
     ch_request = youtube.search().list(
         part="snippet",
         type="channel",
         q=creator
     )
     try:
-        gLogger.debug("Executing youtube channel request...")
         ch_response = ch_request.execute()
-        gLogger.debug("Channel request executed!")
     except Exception as e:
-        gLogger.error(f"Error executing youtube channel request. Type: {type(e)} Arguements:{e}")
+        gLogger.error("Failed to search for channel", creator=creator, error=str(e))
         raise RuntimeError(e)
+
     try:
-        id = ch_response["items"][0]["id"]["channelId"]
-    except Exception:
-        id = ""
-        gLogger.info(f"Couldn't find channel ID for {creator}")
-    gLogger.debug("Returning channel id")
-    return id
+        return ch_response["items"][0]["id"]["channelId"]
+    except (IndexError, KeyError):
+        gLogger.warning("Channel not found", creator=creator)
+        return ""
 
 
 def getVideoYT(youtube, videoID):
     """Get video details from YouTube API."""
     gLogger = getLogger()
-    gLogger.debug("Enter...")
-    videoErrorCount = 0
-    videoDetails = []
-    gLogger.debug("Initialized variables...", videoErrorCount=videoErrorCount)
-    gLogger.debug("Creating YT api video request...")
+
     vid_request = youtube.videos().list(
         part="contentDetails, snippet",
         id=videoID,
     )
-    gLogger.debug("Attempting youtube video request...")
     try:
         vid_response = vid_request.execute()
-        gLogger.debug("Youtube Video Request executed successfully!")
     except Exception as e:
-        videoErrorCount += 1
-        if videoErrorCount > gNumStrikes:
-            gLogger.error(f"Error executing youtube video request. All Strikes Used. Type: {type(e)} Arguements:{e}")
-            raise RuntimeError(e)
-        else:
-            gLogger.warning(f"Unexcepted issue executing youtube video request. Strike: {videoErrorCount} Type: {type(e)} Arguements:{e}")
-            pass
-    gLogger.debug("Unpacking video response... Creating Dictionary...")
+        gLogger.error("Failed to fetch video", video_id=videoID, error=str(e))
+        raise RuntimeError(e)
+
     vid = vid_response["items"]
-    videoDetails = {
+    return {
         "duration": vid["contentDetails"]["duration"],
         "creator": vid["snippet"]["channelTitle"],
         "published": vid["snippet"]["publishedAt"],
@@ -315,9 +255,6 @@ def getVideoYT(youtube, videoID):
         "tags": vid["snippet"]["tag"],
         "categoryIDs": vid["snippet"]["categoryId properties"]
     }
-    gLogger.debug("Video Dictonary Created!")
-    gLogger.debug("Leaving...")
-    return videoDetails
 
 
 def getSubscriptions(youtube, mine=True, channel_id=None):
@@ -325,6 +262,7 @@ def getSubscriptions(youtube, mine=True, channel_id=None):
     gLogger = getLogger()
     nextPageToken = None
     subs = []
+
     while True:
         sub_request = youtube.subscriptions().list(
             part="snippet",
@@ -334,26 +272,25 @@ def getSubscriptions(youtube, mine=True, channel_id=None):
             pageToken=nextPageToken
         )
         try:
-            gLogger.debug("Executing youtube subscription request...")
             sub_response = sub_request.execute()
-            gLogger.debug("Subscription request executed!")
         except Exception as e:
-            gLogger.error(f"Error executing youtube playlist request. Type: {type(e)} Arguements:{e}")
+            gLogger.error("Failed to fetch subscriptions", error=str(e))
             raise RuntimeError(e)
+
         subs += sub_response["items"]
-        gLogger.debug("Getting next page token...")
         nextPageToken = sub_response.get('nextPageToken')
 
-        gLogger.debug("Checking if next page token exist...")
         if not nextPageToken:
-            gLogger.debug("Next page token doesn't exist, breaking out of loop...")
             break
+
+    gLogger.info("Fetched subscriptions", count=len(subs))
     return subs
 
 
 def insertVideoYT(youtube, playlistID, videoID, position=0):
     """Insert a video into a YouTube playlist."""
     gLogger = getLogger()
+
     vid_request = youtube.playlistItems.insert(
         part="snippet",
         body={
@@ -368,11 +305,12 @@ def insertVideoYT(youtube, playlistID, videoID, position=0):
         }
     )
     try:
-        gLogger.debug("Executing youtube video insert request...")
-        vid_response = vid_request.execute()
-        gLogger.debug("Request Succeed! Video inserted!")
+        vid_request.execute()
+        gLogger.info("Video inserted into playlist",
+                     video_id=videoID, playlist_id=playlistID, position=position)
     except Exception as e:
-        gLogger.error(f"Error executing youtube video insert request. Type: {type(e)} Arguements:{e}")
+        gLogger.error("Failed to insert video",
+                      video_id=videoID, playlist_id=playlistID, error=str(e))
         raise RuntimeError(e)
 
 
@@ -381,6 +319,7 @@ def storeSubscripton(subs, youtube):
     gLogger = getLogger()
     creatorDict = getCreatorDictionary([], youtube)[0]
     lastID = max(creatorDict.values()) if creatorDict else 0
+    added = 0
 
     for sub in subs:
         creator_name = sanitizeTitle(sub["snippet"]["title"])
@@ -389,6 +328,10 @@ def storeSubscripton(subs, youtube):
             insertCreatorsDB(creator_name, channel_id=channel_id, subscribedBool=True)
             creatorDict[creator_name] = lastID + 1
             lastID += 1
+            added += 1
+
+    if added:
+        gLogger.info("Stored new subscriptions", count=added)
 
 
 def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=False,
@@ -410,28 +353,32 @@ def insertCreatorsDB(creator, priorirtyScore=0, channel_id=None, subscribedBool=
         )
         db.session.add(new_creator)
         db.session.commit()
-        gLogger.debug(f"Creator {creator} inserted successfully")
+        gLogger.debug("Creator added", name=creator, channel_id=channel_id)
     except Exception as e:
         db.session.rollback()
-        gLogger.error(f"Error inserting creator: {e}")
+        gLogger.error("Failed to insert creator", name=creator, error=str(e))
 
 
 def pubhubsubhubPost(mode, topic, callback):
     """Subscribe to PubSubHubbub notifications for YouTube channels."""
-    url = 'https://pubsubhubbub.appspot.com/subscribe?hub.callback=' + callback + '&hub.mode=' + mode + '&hub.verify=async&hub.lease=2629800&hub.topic=' + topic
+    gLogger = getLogger()
+    url = f'https://pubsubhubbub.appspot.com/subscribe?hub.callback={callback}&hub.mode={mode}&hub.verify=async&hub.lease=2629800&hub.topic={topic}'
     response = requests.post(url)
-    print(response.text)
+    if response.status_code != 200:
+        gLogger.warning("PubSubHubbub request failed",
+                        mode=mode, status=response.status_code)
 
 
 def subscribeCreators():
     """Subscribe to PubSubHubbub notifications for all subscribed creators."""
     gLogger = getLogger()
-    gLogger.debug("Fetching subscribed creators...")
-
-    # Query subscribed creators using ORM
     subscribed_creators = Creator.query.filter_by(subscribed=True).all()
 
+    count = 0
     for creator in subscribed_creators:
         if creator.channelId:
             topic = f'https://www.youtube.com/feeds/videos.xml?channel_id={creator.channelId}'
             pubhubsubhubPost('subscribe', topic, 'http://youtube.lukasarmstrong.io/webhook')
+            count += 1
+
+    gLogger.info("Subscribed to creator notifications", count=count)
