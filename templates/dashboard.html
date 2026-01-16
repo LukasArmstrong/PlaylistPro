@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - PlaylistPro{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-description">Watch Later playlist statistics and trends</p>
+  </div>
+
+  {% if stats %}
+  <!-- Summary Cards -->
+  <div class="row g-4 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ stats[0].Length }}</div>
+        <div class="stat-label">Current Videos</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ (stats[0].TotalDuration / 3600) | round(1) }}h</div>
+        <div class="stat-label">Total Duration</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ (stats[0].AverageDuration / 60) | round(1) }}m</div>
+        <div class="stat-label">Avg Duration</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ stats[0].NumUniqueCreators }}</div>
+        <div class="stat-label">Unique Creators</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Playlist Size Over Time</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="sizeChart" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Duration Distribution</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="durationChart" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Creators Table -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Top Creators</h5>
+      <span class="status-badge info">Last updated: {{ stats[0].Date }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% if creator_stats %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Creator</th>
+              <th>Videos</th>
+              <th>Duration</th>
+              <th>% of Playlist</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cs in creator_stats %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>
+                {% set creator = creators_map.get(cs.CreatorID, {}) %}
+                {{ creator.creators if creator else 'Unknown' }}
+              </td>
+              <td>{{ cs.Frequency }}</td>
+              <td>{{ (cs.Duration / 60) | round(0) | int }}m</td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1" style="height: 6px; max-width: 100px;">
+                    <div class="progress-bar" style="width: {{ (cs.FrequencyPercentage * 100) | round(1) }}%"></div>
+                  </div>
+                  <small>{{ (cs.FrequencyPercentage * 100) | round(1) }}%</small>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon"><i class="bi bi-people"></i></div>
+        <p>No creator statistics available yet</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Empty State -->
+  <div class="card">
+    <div class="empty-state">
+      <div class="empty-state-icon"><i class="bi bi-bar-chart"></i></div>
+      <h4>No Statistics Yet</h4>
+      <p>Run a sort operation to start collecting statistics</p>
+      <a href="{{ url_for('index') }}" class="btn btn-primary mt-2">
+        <i class="bi bi-sort-down"></i> Sort Playlist
+      </a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if stats %}
+<script>
+// Prepare data from stats (reverse to show oldest first)
+const statsData = {{ stats | tojson }};
+const labels = statsData.map(s => s.Date.split(' ')[0]).reverse();
+const lengths = statsData.map(s => s.Length).reverse();
+const durations = statsData.map(s => (s.TotalDuration / 3600).toFixed(1)).reverse();
+
+// Chart.js global defaults for dark theme
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+
+// Playlist Size Chart
+new Chart(document.getElementById('sizeChart'), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'Videos',
+      data: lengths,
+      borderColor: '#22d3ee',
+      backgroundColor: 'rgba(34, 211, 238, 0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+      pointHoverRadius: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: { color: '#21262d' }
+      },
+      x: {
+        grid: { display: false }
+      }
+    }
+  }
+});
+
+// Duration Distribution Chart
+const latestStats = statsData[0];
+new Chart(document.getElementById('durationChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Avg', 'Median', 'Std Dev'],
+    datasets: [{
+      data: [
+        (latestStats.AverageDuration / 60).toFixed(1),
+        (latestStats.MedianDuration / 60).toFixed(1),
+        (latestStats.StdvDuration / 60).toFixed(1)
+      ],
+      backgroundColor: ['#22d3ee', '#3fb950', '#d29922'],
+      borderWidth: 0
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom'
+      }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

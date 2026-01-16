@@ -8,12 +8,37 @@ Supports SQLite (default) and MariaDB/MySQL databases.
 import os
 import uuid
 import threading
-from flask import Flask, request, render_template, flash, jsonify, Response
+from functools import wraps
+from flask import Flask, request, render_template, flash, jsonify, Response, redirect, url_for, session
 from datetime import datetime as dt
 from typing import Callable, Optional, Generator
 
 import pywertube as pt
 from pywertube import config
+
+
+# =============================================================================
+# Authentication
+# =============================================================================
+
+def admin_required(f):
+    """Decorator to protect admin routes with password authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # If no password configured, admin is open (dev mode)
+        if not config.admin_auth_required:
+            return f(*args, **kwargs)
+
+        # Check if user is authenticated
+        if not session.get('admin_authenticated'):
+            # For API endpoints, return 401
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized", "message": "Admin authentication required"}), 401
+            # For pages, redirect to login
+            return redirect(url_for('login', next=request.path))
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 # In-memory job storage (thread-safe)
 _sort_jobs: dict[str, dict] = {}
@@ -57,19 +82,68 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Admin login page."""
+    # If auth not required, redirect to admin
+    if not config.admin_auth_required:
+        return redirect(url_for('admin'))
+
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == config.admin_password:
+            session['admin_authenticated'] = True
+            next_url = request.args.get('next', url_for('admin'))
+            return redirect(next_url)
+        else:
+            error = 'Invalid password'
+
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+def logout():
+    """Log out of admin session."""
+    session.pop('admin_authenticated', None)
+    flash('You have been logged out.')
+    return redirect(url_for('index'))
+
+
+@app.route('/dashboard')
+def dashboard():
+    """Dashboard with stats and visualizations."""
+    # Get recent stats from database
+    stats = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).limit(30).all()
+
+    # Get creator stats for the most recent date
+    latest_date = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).first()
+    creator_stats = []
+    if latest_date:
+        creator_stats = pt.WatchLaterCreatorStat.query.filter_by(
+            date=latest_date.Date
+        ).order_by(pt.WatchLaterCreatorStat.Frequency.desc()).limit(10).all()
+
+    return render_template('dashboard.html', stats=stats, creator_stats=creator_stats)
+
+
+@app.route('/admin')
+@admin_required
+def admin():
+    """Admin page for editing configuration tables."""
+    creators = pt.Creator.query.order_by(pt.Creator.priorityScore.desc()).all()
+    keyphrases = pt.Keyphrase.query.order_by(pt.Keyphrase.score.desc()).all()
+    sequential = pt.SequentialCreator.query.all()
+
+    return render_template('admin.html',
+                          creators=creators,
+                          keyphrases=keyphrases,
+                          sequential=sequential)
+
+
 @app.route('/about')
 def about():
     return render_template('about.html')
-
-
-@app.route('/sorting_editor')
-def sortEditor():
-    return render_template('SortEditor.html')
-
-
-@app.route('/data_visualization')
-def dataVis():
-    return render_template('dataVis.html')
 
 
 @app.route('/webhook', methods=['POST', 'GET'])
@@ -351,6 +425,134 @@ def api_sort_stream():
             'X-Accel-Buffering': 'no'  # Disable nginx buffering
         }
     )
+
+
+# =============================================================================
+# Admin API Endpoints
+# =============================================================================
+
+@app.route('/api/admin/creators', methods=['POST'])
+@admin_required
+def api_add_creator():
+    """Add a new creator."""
+    data = request.get_json()
+    try:
+        creator = pt.Creator(
+            creators=data['name'],
+            priorityScore=data.get('score', 0)
+        )
+        pt.db.session.add(creator)
+        pt.db.session.commit()
+        return jsonify({"success": True, "id": creator.id})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/creators/<int:id>', methods=['PUT'])
+@admin_required
+def api_update_creator(id):
+    """Update a creator's priority score."""
+    data = request.get_json()
+    creator = pt.Creator.query.get_or_404(id)
+    try:
+        if 'score' in data:
+            creator.priorityScore = data['score']
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/creators/<int:id>', methods=['DELETE'])
+@admin_required
+def api_delete_creator(id):
+    """Delete a creator."""
+    creator = pt.Creator.query.get_or_404(id)
+    try:
+        pt.db.session.delete(creator)
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/keyphrases', methods=['POST'])
+@admin_required
+def api_add_keyphrase():
+    """Add a new keyphrase."""
+    data = request.get_json()
+    try:
+        phrase = pt.Keyphrase(
+            phrase=data['phrase'],
+            score=data.get('score', 1)
+        )
+        pt.db.session.add(phrase)
+        pt.db.session.commit()
+        return jsonify({"success": True, "id": phrase.id})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/keyphrases/<int:id>', methods=['PUT'])
+def api_update_keyphrase(id):
+    """Update a keyphrase's score."""
+    data = request.get_json()
+    phrase = pt.Keyphrase.query.get_or_404(id)
+    try:
+        if 'score' in data:
+            phrase.score = data['score']
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/keyphrases/<int:id>', methods=['DELETE'])
+def api_delete_keyphrase(id):
+    """Delete a keyphrase."""
+    phrase = pt.Keyphrase.query.get_or_404(id)
+    try:
+        pt.db.session.delete(phrase)
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/sequential', methods=['POST'])
+def api_add_sequential():
+    """Add a sequential creator."""
+    data = request.get_json()
+    try:
+        seq = pt.SequentialCreator(
+            creatorId=data['creator_id'],
+            DurationExpection=data.get('duration_exception', False)
+        )
+        pt.db.session.add(seq)
+        pt.db.session.commit()
+        return jsonify({"success": True, "id": seq.id})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
+@app.route('/api/admin/sequential/<int:id>', methods=['DELETE'])
+def api_delete_sequential(id):
+    """Remove a sequential creator."""
+    seq = pt.SequentialCreator.query.get_or_404(id)
+    try:
+        pt.db.session.delete(seq)
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
 
 
 def _save_quota(log, inDB, quota):

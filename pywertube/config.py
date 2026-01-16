@@ -73,6 +73,9 @@ class AppConfig:
     host: str = "0.0.0.0"
     port: int = 5000
 
+    # Authentication
+    admin_password: Optional[str] = None  # If None, admin is open (dev mode)
+
     # YouTube
     playlist_id: Optional[str] = None
     oauth_port: int = 8080
@@ -81,6 +84,11 @@ class AppConfig:
     # Sub-configs
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     oauth: OAuthConfig = field(default_factory=OAuthConfig)
+
+    @property
+    def admin_auth_required(self) -> bool:
+        """Check if admin authentication is enabled."""
+        return self.admin_password is not None
 
     @property
     def is_production(self) -> bool:
@@ -129,6 +137,7 @@ def load_config() -> AppConfig:
         secret_key=secret_key,
         host=os.environ.get('HOST_IP', '0.0.0.0'),
         port=int(os.environ.get('HOST_PORT', 5000)),
+        admin_password=os.environ.get('ADMIN_PASSWORD'),
         playlist_id=os.environ.get('YOUTUBE_PLAYLIST_ID'),
         oauth_port=int(os.environ.get('INTERNAL_FLOW_PORT', 8080)),
         project_id=int(os.environ.get('IDRIS_PROJECT_ID', 1)),

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Login - PlaylistPro{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 400px; margin-top: 100px;">
+  <div class="card">
+    <div class="card-header text-center">
+      <h4 class="mb-0"><i class="bi bi-shield-lock"></i> Admin Login</h4>
+    </div>
+    <div class="card-body">
+      {% if error %}
+      <div class="alert alert-danger">
+        <i class="bi bi-x-circle"></i> {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" name="password" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-box-arrow-in-right"></i> Login
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="text-center mt-3">
+    <a href="{{ url_for('index') }}" class="text-muted">
+      <i class="bi bi-arrow-left"></i> Back to Home
+    </a>
+  </div>
+</div>
+{% endblock %}

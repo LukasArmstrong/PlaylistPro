@@ -1,8 +1,160 @@
 {% extends 'base.html' %}
 
-{% block content %}
-    <form method="post" class= "text-center">
-        <button type="submit" class="btn btn-primary sortBtn">Sort Playlist</button>
-    </form>
+{% block title %}Home - PlaylistPro{% endblock %}
 
+{% block content %}
+<div class="hero">
+  <h1 class="hero-title">PlaylistPro</h1>
+  <p class="hero-subtitle">
+    Automatically organize your YouTube Watch Later playlist based on your preferences
+  </p>
+
+  <button id="sortBtn" class="sort-btn" onclick="startSort()">
+    <i class="bi bi-sort-down"></i>
+    Sort Playlist
+  </button>
+
+  <!-- Progress Section (hidden by default) -->
+  <div id="progressSection" class="progress-section" style="display: none;">
+    <div class="progress-step" id="progressStep">
+      <span class="spinner"></span>
+      <span id="stepText">Starting...</span>
+    </div>
+    <div class="progress">
+      <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <!-- Result Section (hidden by default) -->
+  <div id="resultSection" class="mt-4" style="display: none;">
+  </div>
+</div>
+
+<!-- Quick Stats (shown after successful sort or from last run) -->
+{% if last_sort %}
+<div class="container">
+  <div class="row g-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ last_sort.video_count }}</div>
+        <div class="stat-label">Videos</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ last_sort.moves }}</div>
+        <div class="stat-label">Moves</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ last_sort.quota_used }}</div>
+        <div class="stat-label">Quota Used</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card">
+        <div class="stat-value">{{ last_sort.time }}</div>
+        <div class="stat-label">Last Sort</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let eventSource = null;
+
+function startSort() {
+  const btn = document.getElementById('sortBtn');
+  const progressSection = document.getElementById('progressSection');
+  const resultSection = document.getElementById('resultSection');
+  const progressBar = document.getElementById('progressBar');
+  const stepText = document.getElementById('stepText');
+
+  // Disable button and show progress
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Sorting...';
+  progressSection.style.display = 'block';
+  resultSection.style.display = 'none';
+  resultSection.innerHTML = '';
+  progressBar.style.width = '0%';
+  stepText.textContent = 'Connecting...';
+
+  // Start SSE connection
+  eventSource = new EventSource('/api/sort/stream');
+
+  eventSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+
+    if (data.event === 'progress') {
+      progressBar.style.width = data.progress + '%';
+      stepText.textContent = data.step;
+    }
+
+    if (data.event === 'complete') {
+      eventSource.close();
+      progressBar.style.width = '100%';
+
+      if (data.result.success) {
+        stepText.innerHTML = '<i class="bi bi-check-circle text-success"></i> Complete!';
+        showResult(data.result, true);
+      } else {
+        stepText.innerHTML = '<i class="bi bi-x-circle text-danger"></i> Failed';
+        showResult(data.result, false);
+      }
+
+      // Re-enable button
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-sort-down"></i> Sort Playlist';
+    }
+
+    if (data.event === 'keepalive') {
+      // Just a keepalive, ignore
+    }
+  };
+
+  eventSource.onerror = function(error) {
+    console.error('SSE error:', error);
+    eventSource.close();
+
+    stepText.innerHTML = '<i class="bi bi-x-circle text-danger"></i> Connection lost';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-sort-down"></i> Sort Playlist';
+
+    showResult({ success: false, message: 'Connection lost. Please try again.' }, false);
+  };
+}
+
+function showResult(result, success) {
+  const resultSection = document.getElementById('resultSection');
+  resultSection.style.display = 'block';
+
+  if (success) {
+    resultSection.innerHTML = `
+      <div class="alert alert-success fade-in">
+        <strong><i class="bi bi-check-circle"></i> Success!</strong><br>
+        Sorted ${result.video_count} videos with ${result.moves} moves.<br>
+        <small class="text-muted">Quota used: ${result.quota_used}</small>
+      </div>
+    `;
+  } else {
+    resultSection.innerHTML = `
+      <div class="alert alert-danger fade-in">
+        <strong><i class="bi bi-x-circle"></i> Error</strong><br>
+        ${result.message || 'An unexpected error occurred.'}
+      </div>
+    `;
+  }
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+  if (eventSource) {
+    eventSource.close();
+  }
+});
+</script>
 {% endblock %}

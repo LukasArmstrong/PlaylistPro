@@ -1,6 +1,103 @@
 {% extends 'base.html' %}
 
+{% block title %}About - PlaylistPro{% endblock %}
+
 {% block content %}
-    <h1>{% block title %} About {% endblock %}</h1>
-    <p></p>
+<div class="container" style="max-width: 800px;">
+  <div class="page-header text-center">
+    <h1 class="page-title">About PlaylistPro</h1>
+    <p class="page-description">Automatic YouTube Watch Later playlist organization</p>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h4>What is PlaylistPro?</h4>
+      <p>
+        PlaylistPro automatically organizes your YouTube Watch Later playlist based on your
+        preferences. It prioritizes videos from your favorite creators, groups series together,
+        and sorts by duration so you always know what to watch next.
+      </p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h4>How It Works</h4>
+      <div class="row g-4 mt-2">
+        <div class="col-md-4 text-center">
+          <div class="mb-2"><i class="bi bi-1-circle text-primary" style="font-size: 2rem;"></i></div>
+          <h6>Configure</h6>
+          <p class="text-muted small">Set up priority creators, keyphrases, and sequential viewing preferences</p>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="mb-2"><i class="bi bi-2-circle text-primary" style="font-size: 2rem;"></i></div>
+          <h6>Sort</h6>
+          <p class="text-muted small">Click the sort button to reorganize your Watch Later playlist</p>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="mb-2"><i class="bi bi-3-circle text-primary" style="font-size: 2rem;"></i></div>
+          <h6>Watch</h6>
+          <p class="text-muted small">Enjoy a perfectly organized playlist tailored to your preferences</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h4>Sorting Priority</h4>
+      <ol class="mb-0">
+        <li class="mb-2"><strong>Priority Videos</strong> - Videos from creators or with keyphrases you've marked as high priority</li>
+        <li class="mb-2"><strong>Sequential Creators</strong> - Videos from creators whose content should be watched in order (by publish date)</li>
+        <li class="mb-2"><strong>Series</strong> - Videos detected as part of a series, naturally sorted</li>
+        <li class="mb-2"><strong>Remaining Videos</strong> - Sorted by duration (shortest first), then by publish date</li>
+        <li><strong>Follow-ups</strong> - Videos marked as follow-ups are positioned after their predecessors</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h4>API Access</h4>
+      <p>You can trigger sorting programmatically:</p>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Method</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/api/sort</code></td>
+              <td><span class="status-badge info">GET</span></td>
+              <td>Synchronous sort (blocks until complete)</td>
+            </tr>
+            <tr>
+              <td><code>/api/sort</code></td>
+              <td><span class="status-badge success">POST</span></td>
+              <td>Start async sort, returns job_id</td>
+            </tr>
+            <tr>
+              <td><code>/api/sort/status/{job_id}</code></td>
+              <td><span class="status-badge info">GET</span></td>
+              <td>Check async job status</td>
+            </tr>
+            <tr>
+              <td><code>/api/sort/stream</code></td>
+              <td><span class="status-badge info">GET</span></td>
+              <td>SSE stream for real-time progress</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center mt-4 text-muted">
+    <p><small>Built with Flask, SQLAlchemy, and the YouTube Data API</small></p>
+  </div>
+</div>
 {% endblock %}
