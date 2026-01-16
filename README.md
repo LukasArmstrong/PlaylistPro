@@ -125,8 +125,8 @@ Get up and running in minutes with SQLite (no database setup required):
 
 1. **Clone the repo**
    ```sh
-   git clone https://github.com/LukasArmstrong/Youtube-Playlist-Organizer.git
-   cd Youtube-Playlist-Organizer
+   git clone https://github.com/LukasArmstrong/PlaylistPro.git
+   cd PlaylistPro
    ```
 
 2. **Install dependencies**
