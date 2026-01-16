@@ -13,9 +13,11 @@ import operator
 import yaml
 import json
 import statistics as stats
+from dotenv import load_dotenv
 
 from .logging_config import getLogger
 
+load_dotenv()
 
 def checkType(var, expected_type):
     """Validate that a variable is of the expected type."""

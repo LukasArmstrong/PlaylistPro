@@ -9,3 +9,8 @@ structlog==23.2.0
 gunicorn==23.0.0
 Flask-SQLAlchemy>=3.0
 PyMySQL>=1.0
+dotenv>=0.9.9
+
+# Testing
+pytest>=7.0
+pytest-cov>=4.0
