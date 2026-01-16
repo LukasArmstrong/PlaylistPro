@@ -13,6 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key'
 os.environ['ENVIRONMENT'] = 'development'
 
+# Initialize logger for tests - must be done before importing pywertube modules
+from pywertube.logging_config import initLogger
+_test_logger = initLogger(__file__, debug=True, verbose=False)
+
 
 @pytest.fixture(scope='session')
 def app():
