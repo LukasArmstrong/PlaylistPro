@@ -103,9 +103,15 @@ class SequentialCreator(db.Model):
 
     __tablename__ = 'SequentialCreators'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    creatorId = db.Column(db.Integer, db.ForeignKey('Creators.id'), nullable=False)
+    creatorId = db.Column(db.Integer, db.ForeignKey('Creators.id'), primary_key=True)
     DurationExpection = db.Column(db.Float, nullable=True)
+
+    # Note: 'creator' relationship is defined via backref in Creator model
+
+    @property
+    def id(self):
+        """Alias for creatorId for compatibility with admin templates."""
+        return self.creatorId
 
     def __repr__(self):
         return f'<SequentialCreator {self.creatorId}>'
