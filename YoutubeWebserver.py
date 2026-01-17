@@ -133,17 +133,27 @@ def dashboard():
         'NumUniqueCreators': s.NumUniqueCreators
     } for s in stats_query]
 
-    # Get creator stats for the most recent date
+    # Get creator stats for the most recent date (all creators for pie chart)
     latest_date = pt.WatchLaterStat.query.order_by(pt.WatchLaterStat.Date.desc()).first()
-    creator_stats = []
+    creator_stats_query = []
     if latest_date:
-        creator_stats = pt.WatchLaterCreatorStat.query.filter_by(
+        creator_stats_query = pt.WatchLaterCreatorStat.query.filter_by(
             date=latest_date.Date
-        ).order_by(pt.WatchLaterCreatorStat.Frequency.desc()).limit(10).all()
+        ).order_by(pt.WatchLaterCreatorStat.Frequency.desc()).all()
 
     # Build creators map for looking up creator names by ID
     creators = pt.Creator.query.all()
     creators_map = {c.id: c for c in creators}
+
+    # Convert creator_stats to dicts with creator names for JSON serialization
+    creator_stats = [{
+        'CreatorID': cs.CreatorID,
+        'CreatorName': creators_map.get(cs.CreatorID).creators if creators_map.get(cs.CreatorID) else 'Unknown',
+        'Frequency': cs.Frequency,
+        'Duration': cs.Duration,
+        'FrequencyPercentage': cs.FrequencyPercentage,
+        'DurationPercentage': cs.DurationPercentage
+    } for cs in creator_stats_query]
 
     return render_template('dashboard.html', stats=stats, creator_stats=creator_stats, creators_map=creators_map)
 

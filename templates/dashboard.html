@@ -42,21 +42,38 @@
   <div class="row g-4 mb-4">
     <div class="col-lg-8">
       <div class="card">
-        <div class="card-header">
-          <h5 class="mb-0">Playlist Size Over Time</h5>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Trends Over Time</h5>
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-primary active" id="btnSize" onclick="showChart('size')">Size</button>
+            <button type="button" class="btn btn-outline-primary" id="btnDuration" onclick="showChart('duration')">Duration</button>
+            <button type="button" class="btn btn-outline-primary" id="btnCreators" onclick="showChart('creators')">Creators</button>
+          </div>
         </div>
         <div class="card-body">
-          <canvas id="sizeChart" height="300"></canvas>
+          <canvas id="trendChart" height="300"></canvas>
         </div>
       </div>
     </div>
     <div class="col-lg-4">
       <div class="card">
         <div class="card-header">
-          <h5 class="mb-0">Duration Distribution</h5>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Creator Distribution</h5>
+          </div>
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-primary active" id="btnPieSize" onclick="showPieChart('size')">Videos</button>
+              <button type="button" class="btn btn-outline-primary" id="btnPieDuration" onclick="showPieChart('duration')">Duration</button>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <small class="text-muted" id="thresholdLabel">Min:</small>
+              <input type="number" id="pieThreshold" class="form-control form-control-sm" style="width: 60px;" value="2" min="1" max="20" onchange="updatePieChart()">
+            </div>
+          </div>
         </div>
         <div class="card-body">
-          <canvas id="durationChart" height="300"></canvas>
+          <canvas id="creatorPieChart" height="300"></canvas>
         </div>
       </div>
     </div>
@@ -82,13 +99,10 @@
             </tr>
           </thead>
           <tbody>
-            {% for cs in creator_stats %}
+            {% for cs in creator_stats[:10] %}
             <tr>
               <td>{{ loop.index }}</td>
-              <td>
-                {% set creator = creators_map.get(cs.CreatorID, {}) %}
-                {{ creator.creators if creator else 'Unknown' }}
-              </td>
+              <td>{{ cs.CreatorName }}</td>
               <td>{{ cs.Frequency }}</td>
               <td>{{ (cs.Duration / 60) | round(0) | int }}m</td>
               <td>
@@ -134,24 +148,60 @@
 <script>
 // Prepare data from stats (reverse to show oldest first)
 const statsData = {{ stats | tojson }};
-const labels = statsData.map(s => s.Date.split(' ')[0]).reverse();
+
+// Format dates as MM/DD
+const labels = statsData.map(s => {
+  try {
+    const d = new Date(s.Date);
+    if (!isNaN(d.getTime())) {
+      return (d.getMonth() + 1).toString().padStart(2, '0') + '/' + d.getDate().toString().padStart(2, '0');
+    }
+  } catch (e) {}
+  // Fallback: try to extract from string
+  if (typeof s.Date === 'string') {
+    const match = s.Date.match(/(\d{1,2})[-\/](\d{1,2})/);
+    if (match) return match[1] + '/' + match[2];
+  }
+  return '??';
+}).reverse();
+
 const lengths = statsData.map(s => s.Length).reverse();
 const durations = statsData.map(s => (s.TotalDuration / 3600).toFixed(1)).reverse();
+const uniqueCreators = statsData.map(s => s.NumUniqueCreators).reverse();
 
 // Chart.js global defaults for dark theme
 Chart.defaults.color = '#8b949e';
 Chart.defaults.borderColor = '#30363d';
 
-// Playlist Size Chart
-new Chart(document.getElementById('sizeChart'), {
+// Dataset configurations
+const datasets = {
+  size: {
+    label: 'Videos',
+    data: lengths,
+    borderColor: '#22d3ee',
+    backgroundColor: 'rgba(34, 211, 238, 0.1)'
+  },
+  duration: {
+    label: 'Hours',
+    data: durations,
+    borderColor: '#3fb950',
+    backgroundColor: 'rgba(63, 185, 80, 0.1)'
+  },
+  creators: {
+    label: 'Creators',
+    data: uniqueCreators,
+    borderColor: '#d29922',
+    backgroundColor: 'rgba(210, 153, 34, 0.1)'
+  }
+};
+
+// Trend Chart (switchable)
+let trendChart = new Chart(document.getElementById('trendChart'), {
   type: 'line',
   data: {
     labels: labels,
     datasets: [{
-      label: 'Videos',
-      data: lengths,
-      borderColor: '#22d3ee',
-      backgroundColor: 'rgba(34, 211, 238, 0.1)',
+      ...datasets.size,
       fill: true,
       tension: 0.3,
       pointRadius: 3,
@@ -176,32 +226,131 @@ new Chart(document.getElementById('sizeChart'), {
   }
 });
 
-// Duration Distribution Chart
-const latestStats = statsData[0];
-new Chart(document.getElementById('durationChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ['Avg', 'Median', 'Std Dev'],
-    datasets: [{
-      data: [
-        (latestStats.AverageDuration / 60).toFixed(1),
-        (latestStats.MedianDuration / 60).toFixed(1),
-        (latestStats.StdvDuration / 60).toFixed(1)
-      ],
-      backgroundColor: ['#22d3ee', '#3fb950', '#d29922'],
-      borderWidth: 0
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom'
+function showChart(type) {
+  // Update button states
+  document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('btn' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+
+  // Update chart data
+  const ds = datasets[type];
+  trendChart.data.datasets[0].label = ds.label;
+  trendChart.data.datasets[0].data = ds.data;
+  trendChart.data.datasets[0].borderColor = ds.borderColor;
+  trendChart.data.datasets[0].backgroundColor = ds.backgroundColor;
+  trendChart.update();
+}
+
+// Creator Distribution Pie Chart
+const creatorStatsData = {{ creator_stats | tojson }};
+let currentPieMode = 'size';  // 'size' or 'duration'
+
+// Color palette for pie chart
+const pieColors = [
+  '#22d3ee', '#3fb950', '#d29922', '#f85149', '#a371f7',
+  '#79c0ff', '#7ee787', '#e3b341', '#ff7b72', '#d2a8ff',
+  '#56d4dd', '#4ac26b', '#d29922', '#ffa198', '#c297ff'
+];
+
+let creatorPieChart = null;
+
+function buildPieData(mode) {
+  const thresholdInput = parseInt(document.getElementById('pieThreshold').value) || 2;
+  // For duration mode, threshold is in hundreds of minutes (e.g., 2 = 200 min)
+  const threshold = mode === 'size' ? thresholdInput : thresholdInput * 100;
+
+  // Sort by the relevant metric
+  const sorted = [...creatorStatsData].sort((a, b) =>
+    mode === 'size' ? b.Frequency - a.Frequency : b.Duration - a.Duration
+  );
+
+  // Split into above threshold and "Other"
+  // Duration is stored in seconds, convert to minutes for comparison
+  const above = sorted.filter(c => (mode === 'size' ? c.Frequency : c.Duration / 60) >= threshold);
+  const below = sorted.filter(c => (mode === 'size' ? c.Frequency : c.Duration / 60) < threshold);
+
+  const labels = above.map(c => c.CreatorName);
+  const data = above.map(c => mode === 'size' ? c.Frequency : Math.round(c.Duration / 60));
+  const colors = above.map((_, i) => pieColors[i % pieColors.length]);
+
+  // Add "Other" category if there are creators below threshold
+  if (below.length > 0) {
+    labels.push(`Other (${below.length})`);
+    const otherValue = below.reduce((sum, c) =>
+      sum + (mode === 'size' ? c.Frequency : c.Duration / 60), 0
+    );
+    data.push(Math.round(otherValue));
+    colors.push('#484f58');
+  }
+
+  return { labels, data, colors };
+}
+
+function createPieChart() {
+  const { labels, data, colors } = buildPieData(currentPieMode);
+
+  creatorPieChart = new Chart(document.getElementById('creatorPieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            padding: 8,
+            font: { size: 10 }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed;
+              const unit = currentPieMode === 'size' ? ' videos' : ' min';
+              return label + ': ' + value + unit;
+            }
+          }
+        }
       }
     }
-  }
-});
+  });
+}
+
+function showPieChart(mode) {
+  currentPieMode = mode;
+
+  // Update button states
+  document.getElementById('btnPieSize').classList.toggle('active', mode === 'size');
+  document.getElementById('btnPieDuration').classList.toggle('active', mode === 'duration');
+
+  // Update threshold label to indicate scale
+  document.getElementById('thresholdLabel').textContent = mode === 'size' ? 'Min:' : 'Min (x100m):';
+
+  updatePieChart();
+}
+
+function updatePieChart() {
+  const { labels, data, colors } = buildPieData(currentPieMode);
+
+  creatorPieChart.data.labels = labels;
+  creatorPieChart.data.datasets[0].data = data;
+  creatorPieChart.data.datasets[0].backgroundColor = colors;
+  creatorPieChart.update();
+}
+
+// Initialize pie chart
+if (creatorStatsData.length > 0) {
+  createPieChart();
+}
 </script>
 {% endif %}
 {% endblock %}
