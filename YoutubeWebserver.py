@@ -15,6 +15,7 @@ from typing import Callable, Optional, Generator
 
 import pywertube as pt
 from pywertube import config
+from pywertube.dashboard_stats import calculate_turnaround_metrics
 
 
 # =============================================================================
@@ -155,7 +156,11 @@ def dashboard():
         'DurationPercentage': cs.DurationPercentage
     } for cs in creator_stats_query]
 
-    return render_template('dashboard.html', stats=stats, creator_stats=creator_stats, creators_map=creators_map)
+    # Calculate turnaround metrics by comparing historical snapshots
+    turnaround_stats = calculate_turnaround_metrics(creators_map)
+
+    return render_template('dashboard.html', stats=stats, creator_stats=creator_stats,
+                          creators_map=creators_map, turnaround_stats=turnaround_stats)
 
 
 @app.route('/admin')
