@@ -39,9 +39,9 @@
   </div>
 
   <!-- Charts Row -->
-  <div class="row g-4 mb-4">
-    <div class="col-lg-8">
-      <div class="card">
+  <div class="row g-4 mb-4 align-items-stretch">
+    <div class="col-lg-8 d-flex">
+      <div class="card flex-fill">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="mb-0">Trends Over Time</h5>
           <div class="btn-group btn-group-sm" role="group">
@@ -50,13 +50,15 @@
             <button type="button" class="btn btn-outline-primary" id="btnCreators" onclick="showChart('creators')">Creators</button>
           </div>
         </div>
-        <div class="card-body">
-          <canvas id="trendChart" height="300"></canvas>
+        <div class="card-body d-flex flex-column">
+          <div class="flex-fill" style="min-height: 250px;">
+            <canvas id="trendChart"></canvas>
+          </div>
         </div>
       </div>
     </div>
-    <div class="col-lg-4">
-      <div class="card">
+    <div class="col-lg-4 d-flex">
+      <div class="card flex-fill">
         <div class="card-header">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0">Creator Distribution</h5>
@@ -66,23 +68,23 @@
               <button type="button" class="btn btn-outline-primary active" id="btnPieSize" onclick="showPieChart('size')">Videos</button>
               <button type="button" class="btn btn-outline-primary" id="btnPieDuration" onclick="showPieChart('duration')">Duration</button>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-1 ms-3">
               <small class="text-muted" id="thresholdLabel">Min:</small>
-              <input type="number" id="pieThreshold" class="form-control form-control-sm" style="width: 60px;" value="2" min="1" max="20" onchange="updatePieChart()">
+              <input type="number" id="pieThreshold" class="form-control form-control-sm" style="width: 55px;" value="2" min="1" max="20" onchange="updatePieChart()">
             </div>
           </div>
         </div>
         <div class="card-body">
-          <canvas id="creatorPieChart" height="300"></canvas>
+          <canvas id="creatorPieChart"></canvas>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Top Creators Table -->
+  <!-- Most Backlogged Creators Table -->
   <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0">Top Creators</h5>
+      <h5 class="mb-0">Most Backlogged Creators</h5>
       <span class="status-badge info">Last updated: {{ stats[0].Date }}</span>
     </div>
     <div class="card-body p-0">
@@ -93,12 +95,16 @@
             <tr>
               <th>Rank</th>
               <th>Creator</th>
-              <th>Videos</th>
-              <th>Duration</th>
-              <th>% of Playlist</th>
+              <th class="sortable-header active" id="headerVideos" onclick="sortTable('size')" style="cursor: pointer;">
+                Videos <i class="bi bi-caret-down-fill" id="iconVideos"></i>
+              </th>
+              <th class="sortable-header" id="headerDuration" onclick="sortTable('duration')" style="cursor: pointer;">
+                Duration <i class="bi bi-caret-down-fill" id="iconDuration" style="opacity: 0.3;"></i>
+              </th>
+              <th id="percentHeader">% of Playlist</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="creatorsTableBody">
             {% for cs in creator_stats[:10] %}
             <tr>
               <td>{{ loop.index }}</td>
@@ -126,6 +132,85 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- Turnaround Stats -->
+  {% if turnaround_stats and turnaround_stats.has_data %}
+  <div class="row g-4 mt-2">
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Turnaround Time</h5>
+          <small class="text-muted">Hours to clear videos (estimated)</small>
+        </div>
+        <div class="card-body">
+          <div class="row text-center">
+            <div class="col-4">
+              <div class="stat-value" style="font-size: 1.5rem;">{{ turnaround_stats.global_mean }}</div>
+              <div class="stat-label">Mean</div>
+            </div>
+            <div class="col-4">
+              <div class="stat-value" style="font-size: 1.5rem;">{{ turnaround_stats.global_median }}</div>
+              <div class="stat-label">Median</div>
+            </div>
+            <div class="col-4">
+              <div class="stat-value" style="font-size: 1.5rem;">{{ turnaround_stats.global_stdev }}</div>
+              <div class="stat-label">Std Dev</div>
+            </div>
+          </div>
+          <div class="text-center mt-3">
+            <small class="text-muted">Based on {{ turnaround_stats.total_videos_watched }} videos watched</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Turnaround by Creator</h5>
+          <small class="text-muted">Fastest to slowest</small>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-sm mb-0">
+              <thead style="position: sticky; top: 0; background: var(--bg-secondary);">
+                <tr>
+                  <th>Creator</th>
+                  <th>Avg Hours</th>
+                  <th>Videos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for tc in turnaround_stats.creators[:15] %}
+                <tr>
+                  <td>{{ tc.CreatorName }}</td>
+                  <td>
+                    <span class="{% if tc.AvgTurnaround <= turnaround_stats.global_median %}text-success{% elif tc.AvgTurnaround > turnaround_stats.global_mean + turnaround_stats.global_stdev %}text-danger{% endif %}">
+                      {{ tc.AvgTurnaround }}
+                    </span>
+                  </td>
+                  <td><small class="text-muted">{{ tc.VideosWatched }}</small></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <!-- No turnaround data yet -->
+  <div class="card mt-4">
+    <div class="card-header">
+      <h5 class="mb-0">Turnaround Time</h5>
+    </div>
+    <div class="card-body text-center text-muted">
+      <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+      <p class="mt-2 mb-0">Not enough data yet to calculate turnaround metrics.</p>
+      <small>Turnaround is estimated when video counts decrease between sorts.</small>
+    </div>
+  </div>
+  {% endif %}
 
   {% else %}
   <!-- Empty State -->
@@ -332,8 +417,16 @@ function showPieChart(mode) {
   document.getElementById('btnPieSize').classList.toggle('active', mode === 'size');
   document.getElementById('btnPieDuration').classList.toggle('active', mode === 'duration');
 
-  // Update threshold label to indicate scale
-  document.getElementById('thresholdLabel').textContent = mode === 'size' ? 'Min:' : 'Min (x100m):';
+  // Update threshold label and tooltip to indicate scale
+  const label = document.getElementById('thresholdLabel');
+  const input = document.getElementById('pieThreshold');
+  if (mode === 'size') {
+    label.textContent = 'Min:';
+    input.title = 'Minimum number of videos';
+  } else {
+    label.textContent = 'Min:';
+    input.title = 'Minimum minutes (x100, e.g. 2 = 200 min)';
+  }
 
   updatePieChart();
 }
@@ -350,6 +443,69 @@ function updatePieChart() {
 // Initialize pie chart
 if (creatorStatsData.length > 0) {
   createPieChart();
+}
+
+// Table sorting
+let currentTableSort = 'size';
+let tableSortAscending = false;  // false = descending (highest first)
+
+function sortTable(mode) {
+  // If clicking same column, toggle direction; otherwise reset to descending
+  if (currentTableSort === mode) {
+    tableSortAscending = !tableSortAscending;
+  } else {
+    tableSortAscending = false;
+    currentTableSort = mode;
+  }
+
+  // Update header styles
+  document.getElementById('headerVideos').classList.toggle('active', mode === 'size');
+  document.getElementById('headerDuration').classList.toggle('active', mode === 'duration');
+  document.getElementById('iconVideos').style.opacity = mode === 'size' ? '1' : '0.3';
+  document.getElementById('iconDuration').style.opacity = mode === 'duration' ? '1' : '0.3';
+
+  // Update sort direction icons
+  const activeIcon = mode === 'size' ? 'iconVideos' : 'iconDuration';
+  document.getElementById('iconVideos').className = mode === 'size'
+    ? (tableSortAscending ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill')
+    : 'bi bi-caret-down-fill';
+  document.getElementById('iconDuration').className = mode === 'duration'
+    ? (tableSortAscending ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill')
+    : 'bi bi-caret-down-fill';
+
+  // Sort the data
+  const sorted = [...creatorStatsData].sort((a, b) => {
+    const diff = mode === 'size' ? b.Frequency - a.Frequency : b.Duration - a.Duration;
+    return tableSortAscending ? -diff : diff;
+  });
+
+  // Update percentage header
+  document.getElementById('percentHeader').textContent = mode === 'size' ? '% of Playlist' : '% of Duration';
+
+  // Rebuild table body
+  const tbody = document.getElementById('creatorsTableBody');
+  tbody.innerHTML = sorted.slice(0, 10).map((cs, i) => {
+    const percent = mode === 'size'
+      ? (cs.FrequencyPercentage * 100).toFixed(1)
+      : (cs.DurationPercentage * 100).toFixed(1);
+    const duration = Math.round(cs.Duration / 60);
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${cs.CreatorName}</td>
+        <td>${cs.Frequency}</td>
+        <td>${duration}m</td>
+        <td>
+          <div class="d-flex align-items-center gap-2">
+            <div class="progress flex-grow-1" style="height: 6px; max-width: 100px;">
+              <div class="progress-bar" style="width: ${percent}%"></div>
+            </div>
+            <small>${percent}%</small>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 </script>
 {% endif %}
