@@ -272,9 +272,9 @@ PlaylistPro/
 - [X] Create frontend
     - [X] Login with Oauth
     - [X] button for sorting
-    - [ ] GUI to add creator/keywords
-    - [ ] GUI to delete creator/keywords
-    - [ ] GUI to set/update creator/keyword priority
+    - [X] GUI to add creator/keywords
+    - [X] GUI to delete creator/keywords
+    - [X] GUI to set/update creator/keyword priority
 - [ ] Auto add videos to watchlater queue (hopefully in correct position)
      - [ ] Tool to scrape youtube subscriptions
 - [ ] Smarter use of Quota limit data
