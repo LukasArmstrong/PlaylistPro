@@ -48,37 +48,47 @@
               <thead>
                 <tr>
                   <th>Creator</th>
-                  <th>Priority Score</th>
-                  <th>Subscribed</th>
-                  <th>Unconditional</th>
+                  <th title="Higher score = videos sorted earlier in playlist">Priority Score</th>
+                  <th title="Whether you are subscribed to this channel on YouTube">Subscribed</th>
+                  <th title="If enabled, creator's videos are always prioritized regardless of other sorting rules">Unconditional</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for creator in creators %}
-                <tr>
+                <tr data-id="{{ creator.id }}">
                   <td>{{ creator.creators }}</td>
                   <td>
-                    <span class="status-badge {% if creator.priorityScore > 0 %}success{% else %}info{% endif %}">
+                    <span class="display-mode status-badge {% if creator.priorityScore > 0 %}success{% else %}info{% endif %}">
                       {{ creator.priorityScore }}
                     </span>
+                    <input class="edit-mode form-control form-control-sm" type="number"
+                           value="{{ creator.priorityScore }}" min="0" max="10" style="display:none; width:80px">
                   </td>
                   <td>
-                    {% if creator.subscribed %}
-                    <i class="bi bi-check-circle text-success"></i>
-                    {% else %}
-                    <i class="bi bi-dash text-muted"></i>
-                    {% endif %}
+                    <span class="display-mode">
+                      {% if creator.subscribed %}
+                      <i class="bi bi-check-circle text-success"></i>
+                      {% else %}
+                      <i class="bi bi-dash text-muted"></i>
+                      {% endif %}
+                    </span>
+                    <input class="edit-mode form-check-input" type="checkbox"
+                           {% if creator.subscribed %}checked{% endif %} style="display:none">
                   </td>
                   <td>
-                    {% if creator.unconditional %}
-                    <i class="bi bi-check-circle text-success"></i>
-                    {% else %}
-                    <i class="bi bi-dash text-muted"></i>
-                    {% endif %}
+                    <span class="display-mode">
+                      {% if creator.unconditional %}
+                      <i class="bi bi-check-circle text-success"></i>
+                      {% else %}
+                      <i class="bi bi-dash text-muted"></i>
+                      {% endif %}
+                    </span>
+                    <input class="edit-mode form-check-input" type="checkbox"
+                           {% if creator.unconditional %}checked{% endif %} style="display:none">
                   </td>
                   <td>
-                    <button class="btn btn-outline btn-sm" onclick="editCreator({{ creator.id }}, '{{ creator.creators }}', {{ creator.priorityScore }})">
+                    <button class="btn btn-outline btn-sm edit-btn" onclick="toggleEdit(this)">
                       <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-outline btn-sm text-danger" onclick="deleteCreator({{ creator.id }})">
@@ -122,13 +132,15 @@
               </thead>
               <tbody>
                 {% for phrase in keyphrases %}
-                <tr>
+                <tr data-id="{{ phrase.id }}">
                   <td><code>{{ phrase.phrase }}</code></td>
                   <td>
-                    <span class="status-badge success">{{ phrase.score }}</span>
+                    <span class="display-mode status-badge success">{{ phrase.score }}</span>
+                    <input class="edit-mode form-control form-control-sm" type="number"
+                           value="{{ phrase.score }}" min="0" style="display:none; width:80px">
                   </td>
                   <td>
-                    <button class="btn btn-outline btn-sm" onclick="editKeyphrase({{ phrase.id }}, '{{ phrase.phrase }}', {{ phrase.score }})">
+                    <button class="btn btn-outline btn-sm edit-btn" onclick="toggleEditKeyphrase(this)">
                       <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-outline btn-sm text-danger" onclick="deleteKeyphrase({{ phrase.id }})">
@@ -251,7 +263,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Score</label>
-            <input type="number" class="form-control" name="score" value="1" min="1" max="10">
+            <input type="number" class="form-control" name="score" value="1" min="0">
           </div>
         </div>
         <div class="modal-footer">
@@ -327,13 +339,22 @@ function submitCreator(event) {
   .catch(err => alert('Error: ' + err));
 }
 
-function editCreator(id, name, score) {
-  const newScore = prompt(`Edit priority score for "${name}":`, score);
-  if (newScore !== null) {
+function toggleEdit(btn) {
+  const row = btn.closest('tr');
+  const isEditing = row.classList.contains('editing');
+
+  if (isEditing) {
+    // Save mode - gather values and submit
+    const id = row.dataset.id;
+    const score = row.querySelector('input[type="number"]').value;
+    const checkboxes = row.querySelectorAll('input[type="checkbox"]');
+    const subscribed = checkboxes[0].checked;
+    const unconditional = checkboxes[1].checked;
+
     fetch(`/api/admin/creators/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ score: parseInt(newScore) })
+      body: JSON.stringify({ score: parseInt(score), subscribed, unconditional })
     })
     .then(r => r.json())
     .then(result => {
@@ -344,6 +365,12 @@ function editCreator(id, name, score) {
       }
     })
     .catch(err => alert('Error: ' + err));
+  } else {
+    // Enter edit mode
+    row.classList.add('editing');
+    row.querySelectorAll('.display-mode').forEach(el => el.style.display = 'none');
+    row.querySelectorAll('.edit-mode').forEach(el => el.style.display = '');
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
   }
 }
 
@@ -386,13 +413,19 @@ function submitKeyphrase(event) {
   .catch(err => alert('Error: ' + err));
 }
 
-function editKeyphrase(id, phrase, score) {
-  const newScore = prompt(`Edit score for "${phrase}":`, score);
-  if (newScore !== null) {
+function toggleEditKeyphrase(btn) {
+  const row = btn.closest('tr');
+  const isEditing = row.classList.contains('editing');
+
+  if (isEditing) {
+    // Save mode - gather values and submit
+    const id = row.dataset.id;
+    const score = row.querySelector('input[type="number"]').value;
+
     fetch(`/api/admin/keyphrases/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ score: parseInt(newScore) })
+      body: JSON.stringify({ score: parseInt(score) })
     })
     .then(r => r.json())
     .then(result => {
@@ -403,6 +436,12 @@ function editKeyphrase(id, phrase, score) {
       }
     })
     .catch(err => alert('Error: ' + err));
+  } else {
+    // Enter edit mode
+    row.classList.add('editing');
+    row.querySelectorAll('.display-mode').forEach(el => el.style.display = 'none');
+    row.querySelectorAll('.edit-mode').forEach(el => el.style.display = '');
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
   }
 }
 
