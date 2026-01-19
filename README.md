@@ -23,7 +23,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/LukasArmstrong/Youtube-Playlist-Organizer">
-    <img src="Images/PlaylistPro_Logo.png" alt="Logo" width=auto height="80">
+    <img src="static/images/PlaylistPro_Logo.png" alt="Logo" width=auto height="80">
   </a>
 
 <h3 align="center">PlaylistPro</h3>
