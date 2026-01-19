@@ -36,6 +36,8 @@ class Keyphrase(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     phrase = db.Column(db.String(255), nullable=False, unique=True)
     score = db.Column(db.Integer, default=0)
+    serialized = db.Column(db.Boolean, default=False)
+    numberized = db.Column(db.Boolean, default=False)
 
     def __repr__(self):
         return f'<Keyphrase {self.phrase}>'
