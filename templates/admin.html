@@ -179,22 +179,38 @@
               <thead>
                 <tr>
                   <th>Creator</th>
-                  <th>Duration Exception</th>
+                  <th title="If enabled, this creator ignores the global duration threshold">Duration Exception</th>
+                  <th title="Custom duration threshold in minutes (only applies if Duration Exception is enabled)">Threshold (mins)</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for seq in sequential %}
-                <tr>
+                <tr data-id="{{ seq.id }}">
                   <td>{{ seq.creator.creators if seq.creator else 'Unknown' }}</td>
                   <td>
-                    {% if seq.DurationExpection %}
-                    <i class="bi bi-check-circle text-success"></i> Yes
-                    {% else %}
-                    <i class="bi bi-dash text-muted"></i> No
-                    {% endif %}
+                    <span class="display-mode">
+                      {% if seq.DurationExpection %}
+                      <i class="bi bi-check-circle text-success"></i> Yes
+                      {% else %}
+                      <i class="bi bi-dash text-muted"></i> No
+                      {% endif %}
+                    </span>
+                    <input class="edit-mode form-check-input" type="checkbox"
+                           {% if seq.DurationExpection %}checked{% endif %} style="display:none">
                   </td>
                   <td>
+                    <span class="display-mode">
+                      {{ seq.SpecialDurationThresholdMins if seq.SpecialDurationThresholdMins else '-' }}
+                    </span>
+                    <input class="edit-mode form-control form-control-sm" type="number"
+                           value="{{ seq.SpecialDurationThresholdMins or '' }}" min="0" step="0.1"
+                           style="display:none; width:80px">
+                  </td>
+                  <td>
+                    <button class="btn btn-outline btn-sm edit-btn" onclick="toggleEditSequential(this)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
                     <button class="btn btn-outline btn-sm text-danger" onclick="deleteSequential({{ seq.id }})">
                       <i class="bi bi-trash"></i>
                     </button>
@@ -287,12 +303,13 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Creator</label>
-            <select class="form-select" name="creator_id" required>
-              <option value="">Select a creator...</option>
-              {% for creator in creators %}
-              <option value="{{ creator.id }}">{{ creator.creators }}</option>
+            <input type="text" class="form-control" id="creatorSearchInput" list="creatorList"
+                   placeholder="Type to search..." required autocomplete="off">
+            <datalist id="creatorList">
+              {% for creator in creators|sort(attribute='creators') %}
+              <option value="{{ creator.creators }}" data-id="{{ creator.id }}">
               {% endfor %}
-            </select>
+            </datalist>
           </div>
           <div class="mb-3 form-check">
             <input type="checkbox" class="form-check-input" name="duration_exception" id="durationException">
@@ -465,11 +482,20 @@ function submitSequential(event) {
   const form = event.target;
   const data = new FormData(form);
 
+  // Look up creator_id from the selected name
+  const creatorName = document.getElementById('creatorSearchInput').value;
+  const option = document.querySelector(`#creatorList option[value="${creatorName}"]`);
+  if (!option) {
+    alert('Please select a valid creator from the list');
+    return;
+  }
+  const creatorId = option.dataset.id;
+
   fetch('/api/admin/sequential', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      creator_id: parseInt(data.get('creator_id')),
+      creator_id: parseInt(creatorId),
       duration_exception: data.get('duration_exception') === 'on'
     })
   })
@@ -482,6 +508,40 @@ function submitSequential(event) {
     }
   })
   .catch(err => alert('Error: ' + err));
+}
+
+function toggleEditSequential(btn) {
+  const row = btn.closest('tr');
+  const isEditing = row.classList.contains('editing');
+
+  if (isEditing) {
+    // Save mode - gather values and submit
+    const id = row.dataset.id;
+    const durationException = row.querySelector('input[type="checkbox"]').checked;
+    const thresholdInput = row.querySelector('input[type="number"]');
+    const thresholdMins = thresholdInput.value ? parseFloat(thresholdInput.value) : null;
+
+    fetch(`/api/admin/sequential/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration_exception: durationException, threshold_mins: thresholdMins })
+    })
+    .then(r => r.json())
+    .then(result => {
+      if (result.success) {
+        location.reload();
+      } else {
+        alert('Error: ' + result.message);
+      }
+    })
+    .catch(err => alert('Error: ' + err));
+  } else {
+    // Enter edit mode
+    row.classList.add('editing');
+    row.querySelectorAll('.display-mode').forEach(el => el.style.display = 'none');
+    row.querySelectorAll('.edit-mode').forEach(el => el.style.display = '');
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+  }
 }
 
 function deleteSequential(id) {

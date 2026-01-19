@@ -106,7 +106,8 @@ class SequentialCreator(db.Model):
     __tablename__ = 'SequentialCreators'
 
     creatorId = db.Column(db.Integer, db.ForeignKey('Creators.id'), primary_key=True)
-    DurationExpection = db.Column(db.Float, nullable=True)
+    DurationExpection = db.Column(db.Boolean, default=False)
+    SpecialDurationThresholdMins = db.Column(db.Float, nullable=True)
 
     # Note: 'creator' relationship is defined via backref in Creator model
 

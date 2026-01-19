@@ -599,6 +599,24 @@ def api_delete_sequential(id):
         return jsonify({"success": False, "message": str(e)}), 400
 
 
+@app.route('/api/admin/sequential/<int:id>', methods=['PUT'])
+@admin_required
+def api_update_sequential(id):
+    """Update a sequential creator's settings."""
+    data = request.get_json()
+    seq = pt.SequentialCreator.query.get_or_404(id)
+    try:
+        if 'duration_exception' in data:
+            seq.DurationExpection = data['duration_exception']
+        if 'threshold_mins' in data:
+            seq.SpecialDurationThresholdMins = data['threshold_mins']
+        pt.db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        pt.db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+
+
 def _save_quota(log, inDB, quota):
     """Helper to save quota usage, with error handling."""
     try:
