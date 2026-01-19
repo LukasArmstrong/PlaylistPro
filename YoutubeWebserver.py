@@ -9,7 +9,7 @@ import os
 import uuid
 import threading
 from functools import wraps
-from flask import Flask, request, render_template, flash, jsonify, Response, redirect, url_for, session, send_from_directory
+from flask import Flask, request, render_template, flash, jsonify, Response, redirect, url_for, session
 from datetime import datetime as dt
 from typing import Callable, Optional, Generator
 
@@ -80,12 +80,6 @@ logger.info("Database initialized!")
 def inject_config():
     """Make config available in all templates."""
     return {'config': config}
-
-
-@app.route('/Images/<path:filename>')
-def serve_image(filename):
-    """Serve images from the Images folder."""
-    return send_from_directory('Images', filename)
 
 
 @app.route('/', methods=('GET', 'POST'))
