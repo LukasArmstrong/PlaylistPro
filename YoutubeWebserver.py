@@ -488,12 +488,16 @@ def api_add_creator():
 @app.route('/api/admin/creators/<int:id>', methods=['PUT'])
 @admin_required
 def api_update_creator(id):
-    """Update a creator's priority score."""
+    """Update a creator's settings."""
     data = request.get_json()
     creator = pt.Creator.query.get_or_404(id)
     try:
         if 'score' in data:
             creator.priorityScore = data['score']
+        if 'subscribed' in data:
+            creator.subscribed = data['subscribed']
+        if 'unconditional' in data:
+            creator.unconditional = data['unconditional']
         pt.db.session.commit()
         return jsonify({"success": True})
     except Exception as e:
