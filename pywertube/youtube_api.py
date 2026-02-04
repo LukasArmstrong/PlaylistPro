@@ -13,6 +13,7 @@ import requests
 from typing import Any, Optional
 
 import googleapiclient.discovery as gacd
+from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -80,9 +81,14 @@ def getCredentials(portNumber: int, clientConfig: ClientConfig) -> Credentials:
     if not credentials or not credentials.valid:
         if credentials and credentials.expired and credentials.refresh_token:
             gLogger.info("Refreshing expired OAuth token")
-            credentials.refresh(Request())
-            saveCredentails(credentials)
-        else:
+            try:
+                credentials.refresh(Request())
+                saveCredentails(credentials)
+            except Exception as e:
+                gLogger.warning("Token refresh failed, re-authenticating", error=str(e))
+                credentials = None
+
+        if credentials is None:
             gLogger.info("Initiating new OAuth flow")
             flow = getFlowObject(clientConfig)
             flow.run_local_server(
@@ -131,6 +137,13 @@ def getWatchLater(youtube: gacd.Resource, playlistID: str, nextPageBoolean: bool
         )
         try:
             pl_response = pl_request.execute()
+        except HttpError as e:
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                gLogger.error("YouTube API quota exceeded while fetching playlist",
+                              playlist_id=playlistID, requests_made=numberRequest, error=str(e))
+            else:
+                gLogger.error("Failed to fetch playlist", playlist_id=playlistID, error=str(e))
+            raise RuntimeError(e)
         except Exception as e:
             gLogger.error("Failed to fetch playlist", playlist_id=playlistID, error=str(e))
             raise RuntimeError(e)
@@ -146,6 +159,21 @@ def getWatchLater(youtube: gacd.Resource, playlistID: str, nextPageBoolean: bool
             )
             try:
                 vid_response = vid_request.execute()
+            except HttpError as e:
+                if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                    gLogger.error("YouTube API quota exceeded while fetching video details",
+                                  video_id=item["contentDetails"]["videoId"],
+                                  requests_made=numberRequest, error=str(e))
+                    raise RuntimeError(e)
+                errorCount += 1
+                if errorCount > MAX_RETRIES:
+                    gLogger.error("Max retries exceeded fetching video details",
+                                  video_id=item["contentDetails"]["videoId"], error=str(e))
+                    raise RuntimeError(e)
+                gLogger.warning("Retrying video fetch",
+                                video_id=item["contentDetails"]["videoId"],
+                                attempt=errorCount, error=str(e))
+                continue
             except Exception as e:
                 errorCount += 1
                 if errorCount > MAX_RETRIES:
@@ -212,6 +240,19 @@ def updatePlaylist(watchLater: list[VideoTuple], sortedWatchLater: list[VideoTup
                 update_request.execute()
                 numOperations += 1
                 watchLater.insert(x, watchLater.pop(watchLater.index(sortedWatchLater[x])))
+            except HttpError as e:
+                if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                    gLogger.error("YouTube API quota exceeded",
+                                  moves_completed=numOperations, error=str(e))
+                    raise RuntimeError(e)
+                errorCount += 1
+                if errorCount > MAX_RETRIES:
+                    gLogger.error("Max retries exceeded updating playlist",
+                                  video_id=sortedWatchLater[x][2], error=str(e))
+                    raise RuntimeError(e)
+                gLogger.warning("Failed to move video",
+                                video_id=sortedWatchLater[x][2],
+                                position=x, error=str(e))
             except Exception as e:
                 errorCount += 1
                 if errorCount > MAX_RETRIES:

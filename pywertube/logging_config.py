@@ -24,7 +24,6 @@ def initLogger(file, debug=False, verbose=False):
                         structlog.processors.CallsiteParameter.THREAD]
                     ),
                     structlog.contextvars.merge_contextvars,
-                    structlog.processors.dict_tracebacks,
                     structlog.dev.ConsoleRenderer(),
                 ],
                 wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
@@ -43,7 +42,6 @@ def initLogger(file, debug=False, verbose=False):
                         structlog.processors.CallsiteParameter.PROCESS,
                         structlog.processors.CallsiteParameter.THREAD]
                     ),
-                    structlog.processors.dict_tracebacks,
                     structlog.dev.ConsoleRenderer(),
                 ],
                 wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),

@@ -257,6 +257,8 @@ def _perform_sort(on_progress: Optional[Callable[[str, int], None]] = None):
     except Exception as e:
         sortLog.error(f"Failed to get YouTube data: {e}", exc_info=True)
         _save_quota(sortLog, inDB, quota)
+        if 'quotaExceeded' in str(e):
+            return {"success": False, "message": f"YouTube API quota exceeded. {quota} of 10,000 daily units used.", "error": str(e), "quota_used": quota}
         return {"success": False, "message": "Failed to connect to YouTube API", "error": str(e)}
 
     video_count = len(youtubeWatchLater)
@@ -294,6 +296,8 @@ def _perform_sort(on_progress: Optional[Callable[[str, int], None]] = None):
     except Exception as e:
         sortLog.error(f"Failed to update YouTube playlist: {e}", exc_info=True)
         _save_quota(sortLog, inDB, quota)
+        if 'quotaExceeded' in str(e):
+            return {"success": False, "message": f"YouTube API quota exceeded. {quota} of 10,000 daily units used.", "error": str(e), "quota_used": quota}
         return {"success": False, "message": "Failed to update playlist on YouTube", "error": str(e)}
 
     # Step 5: Store statistics (non-critical - don't fail the whole operation)
